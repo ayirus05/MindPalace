@@ -1,0 +1,72 @@
+# MindPalace Tier 2 configuration.
+# Paths are relative to the project root (where this file lives)
+# unless absolute.
+
+# --- Embedding (Ollama) ---
+embedding:
+  model: "nomic-embed-text"
+  host: "http://localhost:11434"
+  timeout_seconds: 60
+  # Number of texts per embedding request to Ollama.
+  batch_size: 32
+  # Retry policy for transient Ollama failures.
+  max_retries: 4
+  retry_initial_wait_seconds: 1.0
+  retry_max_wait_seconds: 30.0
+
+# --- Chunker ---
+chunker:
+  # Target chunk size in tokens for general (non-journal) notes.
+  target_tokens: 300
+  # Overlap between consecutive chunks, in tokens.
+  overlap_tokens: 40
+  # Approximate tokens per word (used for estimates, not hard limits).
+  tokens_per_word: 1.3
+
+# --- LanceDB ---
+database:
+  path: "index/vector.lancedb"
+  table_name: "chunks"
+  # Cosine similarity is the default for nomic-embed-text.
+  metric: "cosine"
+
+# --- Indexer ---
+indexer:
+  # Directories to scan for source documents. Each is walked recursively.
+  source_dirs:
+    - "journals"
+  # File extensions to index.
+  extensions:
+    - ".md"
+    - ".txt"
+  # Path to the content-hash cache (for incremental indexing).
+  hash_cache_path: "cache/hash_cache.json"
+
+# --- Search ---
+search:
+  # Top-K results to fetch from the vector store before reranking.
+  # Higher = better recall, slower. LanceDB pre-filters metadata.
+  prefilter_top_k: 50
+  # Final number of results to return to the caller.
+  default_top_k: 8
+  # Minimum cosine similarity (0..1) to include a result.
+  minimum_score: 0.15
+  # Recency weighting: results within `recency_boost_days` get a bonus.
+  recency_boost_days: 90
+  recency_boost_amount: 0.15
+  # Duplicate suppression: if two hits come from the same source file,
+  # keep only the best-scoring one (unless min_score_diff is exceeded).
+  deduplicate_by_source: true
+  # Domain preference weights. Optional. Domains not listed get weight 1.0.
+  domain_weights:
+    journal: 1.1
+    notes: 1.0
+    transcript: 0.9
+
+# --- Logging ---
+logging:
+  level: "INFO"
+  # Rich table pretty-printing in console.
+  rich_output: true
+  # Log file (set to null to disable).
+  file_path: "cache/palace.log"

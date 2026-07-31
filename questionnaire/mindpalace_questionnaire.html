@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindPalace — Personality Questionnaire</title>
+<style>
+  :root {
+    /* Palette: vellum, ink, brass — a lamplit study */
+    --vellum: #F1ECDF;
+    --vellum-deep: #E8E1D0;
+    --paper: #FBF8F1;
+    --ink: #1E2026;
+    --ink-soft: #3A3D44;
+    --slate: #6B6E76;
+    --slate-soft: #9A9CA3;
+    --rule: #D6CFBE;
+    --rule-soft: #E4DECC;
+    --brass: #A87423;
+    --brass-bright: #C89237;
+    --brass-glow: rgba(200, 146, 55, 0.35);
+    --lit: #B07D2B;
+    --sage: #6E7A6A;
+    --danger: #9E3B2B;
+
+    --font-serif: 'Iowan Old Style', 'Palatino Linotype', 'URW Palladio L', P052, Palatino, 'Book Antiqua', Georgia, serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--vellum);
+    background-image:
+      radial-gradient(at 15% 8%, rgba(168,116,35,0.05) 0px, transparent 50%),
+      radial-gradient(at 85% 90%, rgba(110,122,106,0.05) 0px, transparent 50%);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* ---------- Top bar: the palace sitemap ---------- */
+  .palace-bar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(241, 236, 223, 0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--rule);
+  }
+  .palace-bar-inner {
+    max-width: 880px; margin: 0 auto;
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 18px;
+  }
+  .palace-mark {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    letter-spacing: 0.01em;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .palace-mark .sub {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    color: var(--slate);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    display: block;
+    margin-top: 1px;
+  }
+  .rooms {
+    display: flex; gap: 7px; align-items: center;
+    margin-left: auto;
+  }
+  .room-dot {
+    position: relative;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 1.5px solid var(--slate-soft);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.25s ease;
+  }
+  .room-dot.current {
+    border-color: var(--brass);
+    box-shadow: 0 0 0 4px var(--brass-glow);
+  }
+  .room-dot.completed {
+    background: var(--lit);
+    border-color: var(--lit);
+    box-shadow: 0 0 6px var(--brass-glow);
+  }
+  .room-dot:hover::after {
+    content: attr(data-name);
+    position: absolute; bottom: 22px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink); color: var(--paper);
+    font-size: 11px; padding: 4px 8px; border-radius: 4px;
+    white-space: nowrap; pointer-events: none;
+    font-family: var(--font-sans);
+  }
+  .progress-pct {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--slate);
+    min-width: 38px; text-align: right;
+  }
+
+  /* ---------- Layout ---------- */
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 24px 120px;
+  }
+
+  /* ---------- Welcome ---------- */
+  .welcome { max-width: 640px; }
+  .welcome .eyebrow {
+    font-size: 12px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--brass);
+    margin-bottom: 18px; font-weight: 600;
+  }
+  .welcome h1 {
+    font-family: var(--font-serif);
+    font-size: 48px; line-height: 1.1;
+    font-weight: 400; margin: 0 0 20px;
+    color: var(--ink); letter-spacing: -0.01em;
+  }
+  .welcome h1 em { font-style: italic; color: var(--brass); }
+  .welcome p {
+    font-size: 17px; color: var(--ink-soft);
+    margin: 0 0 16px;
+  }
+  .welcome .meta-row {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    margin: 28px 0;
+    padding: 18px 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .meta-row .meta-item {
+    flex: 1; min-width: 140px;
+  }
+  .meta-row .meta-num {
+    font-family: var(--font-serif);
+    font-size: 28px; color: var(--ink); line-height: 1;
+  }
+  .meta-row .meta-label {
+    font-size: 12px; color: var(--slate);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .start-btn {
+    display: inline-block;
+    background: var(--ink); color: var(--paper);
+    border: none; padding: 15px 32px;
+    font-family: var(--font-sans); font-size: 15px;
+    font-weight: 500; letter-spacing: 0.02em;
+    cursor: pointer; border-radius: 2px;
+    margin-top: 12px;
+    transition: background 0.2s;
+  }
+  .start-btn:hover { background: var(--brass); }
+  .resume-btn {
+    background: transparent; color: var(--ink-soft);
+    border: 1px solid var(--rule); margin-left: 10px;
+    padding: 14px 24px; cursor: pointer; border-radius: 2px;
+    font-family: var(--font-sans); font-size: 14px;
+  }
+  .resume-btn:hover { border-color: var(--brass); color: var(--brass); }
+
+  /* ---------- Category view ---------- */
+  .category-intro { text-align: center; margin-bottom: 40px; }
+  .category-intro .cat-eyebrow {
+    font-size: 12px; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--brass);
+    font-weight: 600; margin-bottom: 10px;
+  }
+  .category-intro h2 {
+    font-family: var(--font-serif);
+    font-size: 34px; font-weight: 400;
+    margin: 0 0 12px; color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .category-intro p {
+    color: var(--slate); font-size: 15px;
+    max-width: 520px; margin: 0 auto;
+  }
+
+  /* ---------- Questions ---------- */
+  .questions { display: flex; flex-direction: column; gap: 36px; }
+  .question {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 24px 26px;
+    box-shadow: 0 1px 2px rgba(30,32,38,0.03);
+  }
+  .question.hidden { display: none; }
+  .q-prompt {
+    font-family: var(--font-serif);
+    font-size: 19px; font-weight: 400;
+    color: var(--ink); margin: 0 0 6px;
+    line-height: 1.35;
+  }
+  .q-help {
+    font-size: 13px; color: var(--slate);
+    margin: 0 0 16px;
+  }
+  .q-id {
+    font-family: var(--font-mono);
+    font-size: 11px; color: var(--slate-soft);
+    letter-spacing: 0.05em; float: right;
+    margin-top: 4px;
+  }
+
+  /* Option cards (single + multi) */
+  .options { display: flex; flex-direction: column; gap: 8px; }
+  .opt {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    background: var(--vellum);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 14.5px; color: var(--ink-soft);
+  }
+  .opt:hover { border-color: var(--brass); background: var(--paper); }
+  .opt-mark {
+    width: 16px; height: 16px; flex: 0 0 16px;
+    border: 1.5px solid var(--slate-soft);
+    border-radius: 50%;
+    margin-top: 2px;
+    transition: all 0.15s;
+  }
+  .opt.multi .opt-mark { border-radius: 3px; }
+  .opt.selected {
+    border-color: var(--brass);
+    background: rgba(168,116,35,0.06);
+    color: var(--ink);
+  }
+  .opt.selected .opt-mark {
+    border-color: var(--brass);
+    background: var(--brass);
+    box-shadow: inset 0 0 0 3px var(--paper);
+  }
+  .opt.multi.selected .opt-mark {
+    box-shadow: none;
+    background: var(--brass);
+    border-color: var(--brass);
+  }
+  .opt.multi.selected .opt-mark::after {
+    content: '✓'; color: var(--paper);
+    font-size: 11px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+    height: 13px; line-height: 13px;
+  }
+  .opt-label { flex: 1; }
+  .opt-desc { display: block; font-size: 12px; color: var(--slate); margin-top: 2px; }
+
+  /* Scale slider */
+  .scale-wrap { padding: 8px 4px 4px; }
+  .scale-track {
+    position: relative; height: 32px;
+    display: flex; align-items: center;
+  }
+  .scale-bar {
+    position: absolute; left: 0; right: 0; height: 3px;
+    background: var(--rule); border-radius: 2px;
+  }
+  .scale-fill {
+    position: absolute; left: 0; height: 3px;
+    background: var(--brass); border-radius: 2px;
+    transition: width 0.1s;
+  }
+  .scale-input {
+    position: absolute; left: 0; right: 0; width: 100%;
+    -webkit-appearance: none; appearance: none;
+    background: transparent; height: 32px; margin: 0;
+    cursor: pointer;
+  }
+  .scale-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--paper); border: 2px solid var(--brass);
+    cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  .scale-input::-moz-range-thumb {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--paper); border: 2px solid var(--brass);
+    cursor: pointer;
+  }
+  .scale-labels {
+    display: flex; justify-content: space-between;
+    margin-top: 8px; font-size: 12px; color: var(--slate);
+  }
+  .scale-value {
+    font-family: var(--font-mono); font-size: 13px;
+    color: var(--brass); margin-top: 6px; text-align: center;
+  }
+
+  /* Text inputs */
+  .text-input, .textarea-input {
+    width: 100%; padding: 12px 14px;
+    border: 1px solid var(--rule); border-radius: 2px;
+    background: var(--vellum); color: var(--ink);
+    font-family: var(--font-sans); font-size: 14.5px;
+    line-height: 1.5; resize: vertical;
+    transition: border-color 0.15s;
+  }
+  .text-input:focus, .textarea-input:focus {
+    outline: none; border-color: var(--brass);
+    background: var(--paper);
+  }
+  .textarea-input { min-height: 80px; }
+  .text-input::placeholder, .textarea-input::placeholder {
+    color: var(--slate-soft); font-style: italic;
+  }
+
+  /* ---------- Nav ---------- */
+  .nav-row {
+    display: flex; justify-content: space-between;
+    align-items: center;
+    margin-top: 48px; padding-top: 24px;
+    border-top: 1px solid var(--rule);
+  }
+  .nav-btn {
+    background: transparent; color: var(--ink-soft);
+    border: 1px solid var(--rule); padding: 11px 22px;
+    font-family: var(--font-sans); font-size: 14px;
+    cursor: pointer; border-radius: 2px;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover:not(:disabled) {
+    border-color: var(--brass); color: var(--brass);
+  }
+  .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .nav-btn.primary {
+    background: var(--ink); color: var(--paper);
+    border-color: var(--ink);
+  }
+  .nav-btn.primary:hover:not(:disabled) {
+    background: var(--brass); border-color: var(--brass);
+  }
+  .nav-status {
+    font-size: 13px; color: var(--slate);
+    font-family: var(--font-mono);
+  }
+
+  /* ---------- Review ---------- */
+  .review-intro { text-align: center; margin-bottom: 32px; }
+  .review-intro h2 {
+    font-family: var(--font-serif); font-size: 32px;
+    font-weight: 400; margin: 0 0 10px;
+  }
+  .review-intro p { color: var(--slate); font-size: 15px; }
+  .review-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px; margin-bottom: 32px;
+  }
+  .review-card {
+    background: var(--paper); border: 1px solid var(--rule);
+    padding: 18px 20px; border-radius: 3px;
+  }
+  .review-card:hover { border-color: var(--brass); }
+  .review-card h3 {
+    font-family: var(--font-serif); font-size: 17px;
+    font-weight: 400; margin: 0 0 6px;
+  }
+  .review-card .count {
+    font-size: 12px; color: var(--slate);
+  }
+  .review-card .status-dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; margin-right: 6px;
+    background: var(--slate-soft);
+  }
+  .review-card.complete .status-dot { background: var(--lit); }
+
+  /* ---------- Export ---------- */
+  .export-section {
+    background: var(--paper); border: 1px solid var(--rule);
+    padding: 24px 26px; border-radius: 3px; margin-top: 32px;
+  }
+  .export-section h3 {
+    font-family: var(--font-serif); font-size: 20px;
+    font-weight: 400; margin: 0 0 6px;
+  }
+  .export-section p { font-size: 13px; color: var(--slate); margin: 0 0 16px; }
+  .file-list { display: flex; flex-direction: column; gap: 8px; }
+  .file-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    background: var(--vellum); border: 1px solid var(--rule);
+    border-radius: 2px; font-size: 13px;
+  }
+  .file-row code {
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--ink); flex: 1;
+  }
+  .file-btns { display: flex; gap: 6px; }
+  .mini-btn {
+    background: transparent; border: 1px solid var(--rule);
+    color: var(--ink-soft); padding: 5px 10px;
+    font-size: 12px; cursor: pointer; border-radius: 2px;
+    font-family: var(--font-sans);
+  }
+  .mini-btn:hover { border-color: var(--brass); color: var(--brass); }
+  .mini-btn.all {
+    background: var(--ink); color: var(--paper); border-color: var(--ink);
+  }
+  .mini-btn.all:hover { background: var(--brass); border-color: var(--brass); }
+  .preview-area {
+    width: 100%; min-height: 280px;
+    margin-top: 16px; padding: 14px;
+    background: var(--vellum-deep); border: 1px solid var(--rule);
+    border-radius: 2px;
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--ink-soft); line-height: 1.6;
+    white-space: pre-wrap; overflow-x: auto;
+    resize: vertical;
+  }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink); color: var(--paper);
+    padding: 10px 20px; border-radius: 3px;
+    font-size: 13px; opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+  /* small screens */
+  @media (max-width: 640px) {
+    .palace-bar-inner { padding: 10px 14px; gap: 10px; }
+    .palace-mark { font-size: 15px; }
+    .palace-mark .sub { font-size: 9px; }
+    .rooms { gap: 5px; }
+    .room-dot { width: 11px; height: 11px; }
+    .progress-pct { display: none; }
+    .wrap { padding: 28px 16px 80px; }
+    .welcome h1 { font-size: 34px; }
+    .category-intro h2 { font-size: 26px; }
+    .question { padding: 18px 18px; }
+    .review-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="palace-bar">
+  <div class="palace-bar-inner">
+    <div class="palace-mark">
+      MindPalace
+      <span class="sub">Personality Survey</span>
+    </div>
+    <div class="rooms" id="rooms"></div>
+    <div class="progress-pct" id="progressPct">0%</div>
+  </div>
+</div>
+
+<div class="wrap" id="app"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   MINDPALACE QUESTIONNAIRE
+   - 10 categories, each branching based on prior answers
+   - Autosaves to localStorage
+   - Exports structured markdown per domain + INDEX.md
+   ============================================================ */
+
+const STORAGE_KEY = 'mindpalace_questionnaire_v1';
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+/* ---------- Question types:
+   single  -> pick one (options)
+   multi   -> pick several (options, optional max)
+   scale   -> 1..N slider (scale labels at ends)
+   text    -> single line (placeholder)
+   longtext-> textarea (placeholder)
+   ---------- */
+
+const CATEGORIES = [
+  {
+    id: 'identity',
+    title: 'Identity & Roles',
+    file: 'profile.md',
+    frontmatter: { name: 'profile', description: 'Identity, demographics, life stage, roles, and self-narrative. The "who" that orients every other domain.', type: 'identity' },
+    intro: 'Let\'s start with who you are in the world right now. The roles you hold and the chapter you\'re living set the frame for everything else.',
+    questions: [
+      { id: 'i_roles', prompt: 'Which roles shape most of your days?', help: 'Pick all that apply.', type: 'multi', section: 'Roles & commitments',
+        options: ['Parent','Partner','Caregiver','Founder / Entrepreneur','Employee / Professional','Student','Creator / Artist','Community leader','Solopreneur / Freelancer','Retired'] },
+      { id: 'i_stage', prompt: 'Which word best describes your current life stage?', type: 'single', section: 'Life narrative',
+        options: [
+          { v:'Building', d:'Actively constructing — career, family, identity' },
+          { v:'Established', d:'Settled into a known shape' },
+          { v:'Transitioning', d:'Between chapters, shifting' },
+          { v:'Reflecting', d:'Looking back as much as forward' }
+        ] },
+      { id: 'i_chapter', prompt: 'In a sentence or two, describe the chapter you\'re in.', type: 'longtext', section: 'Life narrative', placeholder: 'e.g. "Early thirties, scaling a business I founded, becoming a parent for the first time."' },
+      { id: 'i_formative', prompt: 'What are 2–3 experiences that shaped who you are?', type: 'longtext', section: 'Life narrative', placeholder: 'Briefly — what happened, and what it changed in you.' },
+      { id: 'i_proud', prompt: 'What are you most proud of having done or become?', type: 'longtext', section: 'Life narrative' },
+      { id: 'i_hours', prompt: 'Where do most of your hours actually go each week?', help: 'Be honest — this is time as it is, not as you wish it were.', type: 'multi', section: 'Roles & commitments',
+        options: ['Work','Caregiving','Relationships','Solo pursuits','Rest & recovery','Learning','Service / community','Creative output'] },
+      { id: 'i_conflict', prompt: 'Any roles that compete for attention? Which ones?', type: 'longtext', section: 'Roles & commitments', depends: [{ q:'i_roles', in:['Parent','Partner','Caregiver','Founder / Entrepreneur','Employee / Professional'] }] },
+      { id: 'i_one_line', prompt: 'Who are "you", in the most honest one-line answer you can give?', type: 'text', section: 'Life narrative', placeholder: 'The answer you\'d give if no one were listening.' },
+      { id: 'i_community', prompt: 'What communities do you belong to?', type: 'text', section: 'Belonging & identity anchors', placeholder: 'Faith, professional, hobby, neighborhood, identity-based...' },
+      { id: 'i_anchors', prompt: 'Identity markers that feel load-bearing — things that, if removed, would change your sense of self?', type: 'longtext', section: 'Belonging & identity anchors' },
+    ]
+  },
+
+  {
+    id: 'personality',
+    title: 'Personality & Temperament',
+    file: 'personality.md',
+    frontmatter: { name: 'personality', description: 'Big Five markers, temperament, and dispositional patterns. The trait-level picture of how this person typically is.', type: 'trait-profile' },
+    intro: 'These questions sketch your trait-level baseline. There are no right answers — answer as you actually are, not as you\'d like to be.',
+    questions: [
+      { id: 'p_open', prompt: 'Openness — how curious vs. preferring the familiar?', help: '1 = prefer the known, 5 = relentlessly curious', type: 'scale', section: 'Openness to experience', scale: 5, lowLabel:'Prefer the familiar', highLabel:'Relentlessly curious' },
+      { id: 'p_open_detail', prompt: 'What pulls your curiosity most? (or, if you prefer the familiar — what grounds you?)', type: 'longtext', section: 'Openness to experience' },
+      { id: 'p_consc', prompt: 'Conscientiousness — organized/disciplined vs. flexible/spontaneous?', type: 'scale', section: 'Conscientiousness', scale: 5, lowLabel:'Flexible / spontaneous', highLabel:'Organized / disciplined' },
+      { id: 'p_consc_detail', prompt: 'How does your organization style actually look day-to-day?', type: 'text', section: 'Conscientiousness', placeholder: 'Calendar devout, inbox chaotic; or vice versa...' },
+      { id: 'p_extra', prompt: 'Extraversion — social/stimulated vs. quiet/low-stimulation?', type: 'scale', section: 'Extraversion', scale: 5, lowLabel:'Quiet / low-stimulation', highLabel:'Social / stimulated' },
+      { id: 'p_extra_low', prompt: 'What lets you recharge in quiet?', type: 'longtext', section: 'Extraversion', depends: [{ q:'p_extra', max:2 }] },
+      { id: 'p_extra_high', prompt: 'What kind of social settings charge you up most?', type: 'longtext', section: 'Extraversion', depends: [{ q:'p_extra', min:4 }] },
+      { id: 'p_agree', prompt: 'Agreeableness — cooperative/trusting vs. tough-minded/skeptical?', type: 'scale', section: 'Agreeableness', scale: 5, lowLabel:'Tough-minded / skeptical', highLabel:'Cooperative / trusting' },
+      { id: 'p_neuro', prompt: 'Emotional stability — even-keeled vs. reactive?', type: 'scale', section: 'Neuroticism / emotional stability', scale: 5, lowLabel:'Even-keeled', highLabel:'Reactive / sensitive' },
+      { id: 'p_neuro_detail', prompt: 'How quickly do you recover from being upset?', type: 'single', section: 'Neuroticism / emotional stability', options: ['Minutes','Hours','A day','Days','Longer'] },
+      { id: 'p_energy', prompt: 'What\'s your energy pattern through the day?', type: 'single', section: 'Temperament', options: ['Early bird / morning peak','Afternoon peak','Evening second wind','Night owl','Variable / no pattern'] },
+      { id: 'p_risk', prompt: 'How do you handle risk?', type: 'single', section: 'Temperament', options: [
+        { v:'Novelty-seeking', d:'Chases the new' }, { v:'Cautious', d:'Holds back, weighs' },
+        { v:'Calculated', d:'Takes risks with a thesis' }, { v:'Risk-averse', d:'Avoids when possible' }
+      ] },
+      { id: 'p_notice', prompt: 'What do people consistently notice about you? (the "you always..." feedback)', type: 'longtext', section: 'Patterns' },
+      { id: 'p_changing', prompt: 'What are you working on changing about yourself?', type: 'longtext', section: 'Patterns' },
+      { id: 'p_repeat', prompt: 'Behaviors you repeat across contexts — habits that show up everywhere?', type: 'longtext', section: 'Patterns' },
+    ]
+  },
+
+  {
+    id: 'values',
+    title: 'Values & Philosophy',
+    file: 'values.md',
+    frontmatter: { name: 'values', description: 'Core values, life philosophy, and domain mindsets (money, health, growth, freedom, relationships). What this person treats as non-negotiable.', type: 'values' },
+    intro: 'Values are the load-bearing principles — the ones you\'d violate at cost. This section maps the handful that actually govern your choices.',
+    questions: [
+      { id: 'v_top', prompt: 'Pick your top 3 values.', help: 'If everything else fell away, these are what would still matter.', type: 'multi', max:3, section: 'Core values',
+        options: ['Autonomy','Achievement','Connection','Growth','Integrity','Security','Adventure','Mastery','Contribution','Recognition','Freedom','Stability','Creativity','Faith','Family','Justice','Wisdom','Joy'] },
+      { id: 'v_tension', prompt: 'Are any of your values in tension with each other?', type: 'longtext', section: 'Core values', placeholder: 'e.g. freedom vs. security; ambition vs. presence.' },
+      { id: 'v_outgrown', prompt: 'A value you\'ve outgrown?', type: 'text', section: 'Core values', placeholder: 'Something that used to drive you and no longer fits.' },
+      { id: 'v_stance', prompt: 'Your default stance on life?', type: 'single', section: 'Life philosophy', options: ['Optimistic','Pragmatic','Skeptical','Stoic','Curious-cynical','Idealistic'] },
+      { id: 'v_meaning', prompt: 'What gives your life meaning?', type: 'longtext', section: 'Life philosophy', placeholder: 'Your honest answer to "what\'s the point?"' },
+      { id: 'v_uncertainty', prompt: 'Your relationship to uncertainty?', type: 'single', section: 'Life philosophy', options: ['Embraces it','Tolerates it','Manages it','Avoids it'] },
+      { id: 'v_money', prompt: 'Your money mindset?', type: 'single', section: 'Money mindset', options: ['Scarcity','Stewardship','Abundance','Instrumental (it\'s a tool)'] },
+      { id: 'v_money_risk', prompt: 'Risk tolerance with money?', type: 'single', section: 'Money mindset', depends: [{ q:'v_money', exists:true }], options: ['Conservative','Balanced','Aggressive'] },
+      { id: 'v_money_means', prompt: 'What does money mean to you?', type: 'single', section: 'Money mindset', options: ['Security','Freedom','Status','A tool','All of these in tension'] },
+      { id: 'v_health', prompt: 'Your health philosophy?', type: 'single', section: 'Health mindset', options: ['Preventive','Performance-optimized','Reactive','Balanced'] },
+      { id: 'v_health_rank', prompt: 'How high a priority is health? (1 = afterthought, 10 = non-negotiable)', type: 'scale', section: 'Health mindset', scale: 10, lowLabel:'Afterthought', highLabel:'Non-negotiable' },
+      { id: 'v_growth', prompt: 'Your stance on learning?', type: 'single', section: 'Growth mindset', options: ['Lifelong learner','Goal-oriented','Curious dabbler','Learning is situational'] },
+      { id: 'v_failure', prompt: 'Your relationship to failure?', type: 'single', section: 'Growth mindset', options: ['Reframes and moves on','Processes it hard','Avoids it','Hides it','Treats it as data'] },
+      { id: 'v_freedom', prompt: 'How important is independence / autonomy to you?', type: 'scale', section: 'Freedom & autonomy', scale: 5, lowLabel:'I collaborate fine', highLabel:'I need autonomy' },
+      { id: 'v_freedom_trade', prompt: 'What would you trade freedom for — and what wouldn\'t you?', type: 'longtext', section: 'Freedom & autonomy' },
+      { id: 'v_line', prompt: 'What\'s a line you won\'t cross?', type: 'longtext', section: 'Non-negotiables' },
+      { id: 'v_sacrifice', prompt: 'What would you sacrifice for? What would you refuse to sacrifice?', type: 'longtext', section: 'Non-negotiables' },
+    ]
+  },
+
+  {
+    id: 'communication',
+    title: 'Communication Style',
+    file: 'communication.md',
+    frontmatter: { name: 'communication', description: 'How this person communicates and how they prefer to be communicated with — tone, formality, directness, and information preferences. Critical for Claude tuning its voice.', type: 'communication-style' },
+    intro: 'This is the section Claude reads most carefully to tune its voice. The more honest you are, the better every future answer lands.',
+    questions: [
+      { id: 'c_direct', prompt: 'How direct are you?', help: '1 = sugarcoats, 10 = brutally direct', type: 'scale', section: 'Outgoing style', scale: 10, lowLabel:'Sugarcoats', highLabel:'Brutally direct' },
+      { id: 'c_direct_soft', prompt: 'When you deliver hard truths, how do you soften them?', type: 'longtext', section: 'Outgoing style', depends: [{ q:'c_direct', max:4 }] },
+      { id: 'c_direct_straight', prompt: 'Do you ever soften, or always straight?', type: 'single', section: 'Outgoing style', depends: [{ q:'c_direct', min:7 }],
+        options: ['Always straight','Soften for sensitive topics','Read the room','Depends on stakes'] },
+      { id: 'c_tone', prompt: 'Your default tone?', type: 'single', section: 'Outgoing style', options: ['Casual','Warm','Formal','Dry-humored','Sarcastic','Reserved','Enthusiastic'] },
+      { id: 'c_verb', prompt: 'Your verbosity?', type: 'single', section: 'Outgoing style', options: ['Terse','Medium','Expansive'] },
+      { id: 'c_humor', prompt: 'Your humor style? (pick all that apply)', type: 'multi', section: 'Outgoing style',
+        options: ['Dry','Playful','Sarcastic','Absurd','Self-deprecating','Absent'] },
+      { id: 'c_recv_direct', prompt: 'When receiving info, how direct do you want it back?', type: 'scale', section: 'Incoming preferences', scale: 10, lowLabel:'Soften it', highLabel:'Tell me straight' },
+      { id: 'c_depth', prompt: 'How much context do you want before a recommendation?', type: 'single', section: 'Incoming preferences', options: ['Headline + one line','Full reasoning','Both — headline first, detail available','Depends on stakes'] },
+      { id: 'c_hedge', prompt: 'Tolerance for hedging in answers?', help: '1 = just tell me, 10 = flag every uncertainty', type: 'scale', section: 'Incoming preferences', scale: 10, lowLabel:'Just tell me', highLabel:'Flag the uncertainty' },
+      { id: 'c_format', prompt: 'Format preference?', type: 'single', section: 'Incoming preferences', options: ['Prose','Bullets','Tables','Depends on context'] },
+      { id: 'c_options', prompt: 'When you want options vs. a single recommendation?', type: 'single', section: 'Incoming preferences', options: ['Almost always want one recommendation','Options for big decisions only','Want options, then a recommendation','Want to decide myself'] },
+      { id: 'c_conflict', prompt: 'Your conflict style?', type: 'single', section: 'Conflict communication', options: ['Avoid','Accommodate','Compromise','Confront','Collaborate'] },
+      { id: 'c_hard_in', prompt: 'How do you receive hard feedback?', type: 'longtext', section: 'Conflict communication' },
+      { id: 'c_shuts_down', prompt: 'What shuts you down in conversation?', type: 'longtext', section: 'Conflict communication' },
+      { id: 'c_opens_up', prompt: 'What opens you up?', type: 'longtext', section: 'Conflict communication' },
+      { id: 'c_written_speak', prompt: 'Written vs. spoken — which do you prefer for important matters?', type: 'single', section: 'Written vs. spoken', options: ['Written — gives me time','Spoken — real-time','Depends on the topic'] },
+      { id: 'c_emoji', prompt: 'Emojis and rich formatting from Claude?', type: 'single', section: 'Claude-specific guidance', options: ['Use freely','Sparingly','Never'] },
+      { id: 'c_pushback', prompt: 'Do you want Claude to push back on you?', type: 'single', section: 'Claude-specific guidance', options: ['Yes — challenge me','Gently — frame it softly','No — agree and refine','Depends on stakes'] },
+      { id: 'c_when_unsure', prompt: 'When Claude is unsure of your preference — what should it do?', type: 'single', section: 'Claude-specific guidance', options: ['Ask','Pick a sensible default and note it','Default to your patterns'] },
+    ]
+  },
+
+  {
+    id: 'motivation',
+    title: 'Motivation & Drive',
+    file: 'motivation.md',
+    frontmatter: { name: 'motivation', description: 'What energizes and drives this person, goal-orientation, and what kills their motivation. Essential for framing advice in terms that actually move them.', type: 'motivation' },
+    intro: 'What lights you up, what you\'re moving toward, and what drains you. Advice framed in your actual motivation language moves you; advice framed generically doesn\'t.',
+    questions: [
+      { id: 'm_driver', prompt: 'What gets you out of bed?', type: 'single', section: 'Motivation profile', options: ['Achievement','Connection','Autonomy','Mastery','Purpose','Security','Status','Curiosity'] },
+      { id: 'm_driver_detail', prompt: 'What does that driver look like when it\'s actually working in your life?', type: 'longtext', section: 'Motivation profile' },
+      { id: 'm_io', prompt: 'More internally or externally driven?', type: 'scale', section: 'Motivation profile', scale: 5, lowLabel:'Externally driven', highLabel:'Internally driven' },
+      { id: 'm_approach', prompt: 'Approach or avoidance motivation?', type: 'single', section: 'Motivation profile', options: ['Moving toward goals','Moving away from threats','Mix of both','Depends on the domain'] },
+      { id: 'm_flow', prompt: 'What activities produce flow for you?', type: 'longtext', section: 'What energizes them' },
+      { id: 'm_charge_up', prompt: 'What people or environments charge you up?', type: 'text', section: 'What energizes them' },
+      { id: 'm_drain', prompt: 'What drains you?', type: 'longtext', section: 'What drains them' },
+      { id: 'm_kill', prompt: 'What kills your motivation?', help: 'Pick all that apply.', type: 'multi', section: 'What drains them',
+        options: ['Micromanagement','Lack of progress','No purpose','No autonomy','Confusion about goals','Interpersonal conflict','Injustice','Burnout','Boredom'] },
+      { id: 'm_goalstyle', prompt: 'Your goal-setting style?', type: 'single', section: 'Goal orientation', options: ['Sets specific targets','Drifts toward interests','Anti-goals (what to avoid)','Mix'] },
+      { id: 'm_horizon', prompt: 'Your natural time horizon?', type: 'single', section: 'Goal orientation', options: ['Days','Weeks','Quarters','Years','Decades'] },
+      { id: 'm_goaltype', prompt: 'Preferred goal type?', type: 'single', section: 'Goal orientation', options: ['Outcome goals','Process goals','Identity goals'] },
+      { id: 'm_deadline', prompt: 'Relationship to deadlines?', type: 'single', section: 'Goal orientation', options: ['Energizing','Stressful but effective','Ignored until last minute','Paralyzing'] },
+      { id: 'm_start_finish', prompt: 'Starting vs. finishing — where are you strong?', type: 'single', section: 'Follow-through patterns', options: ['Strong starter','Strong finisher','Middle-slump','Even throughout'] },
+      { id: 'm_follow', prompt: 'What helps you follow through?', help: 'Pick all that apply.', type: 'multi', section: 'Follow-through patterns',
+        options: ['Accountability partner','Streaks / tracking','Specific tools','Deadlines','Pairing with someone','Public commitment','Reward structure'] },
+      { id: 'm_streak_break', prompt: 'What breaks your streak?', type: 'text', section: 'Follow-through patterns' },
+      { id: 'm_account', prompt: 'What kind of accountability works for you?', type: 'single', section: 'Accountability & feedback', options: ['Public','Peer','Self-tracked','Paid coach','None — I just do it'] },
+      { id: 'm_progress', prompt: 'How do you want progress shown to you?', type: 'single', section: 'Accountability & feedback', options: ['Numbers','Narratives','Visuals','Depends'] },
+      { id: 'm_needle', prompt: 'What\'s "the needle" you most want to move right now?', type: 'longtext', section: 'What "moving the needle" means' },
+      { id: 'm_trade', prompt: 'What would you trade for it — and what wouldn\'t you trade?', type: 'longtext', section: 'What "moving the needle" means' },
+    ]
+  },
+
+  {
+    id: 'cognition',
+    title: 'Cognitive Patterns',
+    file: 'cognition.md',
+    frontmatter: { name: 'cognition', description: 'How this person thinks — decision-making, problem-solving, learning style, and information processing. Shapes how Claude explains things and presents options.', type: 'cognitive-patterns' },
+    intro: 'How you think, decide, and learn. Claude uses this to explain things in the format that actually lands, and to present options the way you process them.',
+    questions: [
+      { id: 'cog_decide', prompt: 'How do you usually make decisions?', type: 'single', section: 'Decision-making', options: ['Intuitive — gut first','Analytical — weigh it out','Consensus-seeking','Rapid-iterative — decide and adjust'] },
+      { id: 'cog_decide_int', prompt: 'When the gut speaks, how do you know to trust it?', type: 'longtext', section: 'Decision-making', depends: [{ q:'cog_decide', in:['Intuitive — gut first'] }] },
+      { id: 'cog_decide_an', prompt: 'What\'s your process when you\'re weighing a big call?', type: 'longtext', section: 'Decision-making', depends: [{ q:'cog_decide', in:['Analytical — weigh it out'] }] },
+      { id: 'cog_info', prompt: 'Before deciding, you need?', type: 'single', section: 'Decision-making', options: ['Minimum viable info','Comprehensive info','Decide-then-justify','Enough to move — adjust later'] },
+      { id: 'cog_irrev', prompt: 'Comfort with irreversible decisions?', type: 'scale', section: 'Decision-making', scale: 5, lowLabel:'Avoid irreversibility', highLabel:'Comfortable one-way doors' },
+      { id: 'cog_post', prompt: 'Post-decision — what\'s your style?', type: 'single', section: 'Decision-making', options: ['Moves on','Second-guesses','Collects feedback','Re-litigates endlessly'] },
+      { id: 'cog_fatigue', prompt: 'When does decision fatigue hit you?', type: 'single', section: 'Decision-making', options: ['Rarely','End of day','After many small decisions','Under pressure','After big calls'] },
+      { id: 'cog_first', prompt: 'First move when facing a hard problem?', type: 'single', section: 'Problem-solving', options: ['Gather data','Talk it out','Sit with it','Act — learn by doing'] },
+      { id: 'cog_structure', prompt: 'Preference for structure vs. exploration?', type: 'scale', section: 'Problem-solving', scale: 5, lowLabel:'Explore first', highLabel:'Structure first' },
+      { id: 'cog_ambig', prompt: 'How do you handle ambiguity?', type: 'longtext', section: 'Problem-solving' },
+      { id: 'cog_input', prompt: 'Preferred input for learning something new?', type: 'single', section: 'Learning style', options: ['Reading','Listening','Watching','Doing','Discussing'] },
+      { id: 'cog_depth', prompt: 'On a new topic, you want?', type: 'single', section: 'Learning style', options: ['Overview first','Dive deep immediately','Both — overview then deep','Just show me a working example'] },
+      { id: 'cog_retain', prompt: 'What do you remember best?', type: 'single', section: 'Learning style', options: ['Concepts','Details','Procedures','Names & faces','Stories'] },
+      { id: 'cog_capture', prompt: 'Tools or systems you use to capture knowledge?', type: 'text', section: 'Learning style', placeholder: 'Notebooks, apps, voice memos...' },
+      { id: 'cog_beginner', prompt: 'Comfort with being a beginner?', type: 'scale', section: 'Learning style', scale: 5, lowLabel:'Hate it', highLabel:'Love it' },
+      { id: 'cog_bp', prompt: 'Big-picture first or detail-first?', type: 'single', section: 'Information processing', options: ['Big-picture first','Detail-first','Oscillates between both'] },
+      { id: 'cog_wm', prompt: 'Do you hold context in your head or externalize everything?', type: 'single', section: 'Information processing', options: ['In my head','Externalize everything','Mixed'] },
+      { id: 'cog_skeptic', prompt: 'Skepticism default?', type: 'single', section: 'Information processing', options: ['Trusts sources until disproven','Verifies','Doubts by default','Source-dependent'] },
+      { id: 'cog_think_place', prompt: 'Where do you do your best thinking?', type: 'single', section: 'Thinking environment', options: ['Walking / in motion','At my desk','Late at night','In silence','In café noise','In the shower'] },
+      { id: 'cog_deepwork', prompt: 'Conditions for deep work?', type: 'text', section: 'Thinking environment' },
+      { id: 'cog_interruption', prompt: 'Interruption tolerance?', type: 'scale', section: 'Thinking environment', scale: 5, lowLabel:'Low', highLabel:'High' },
+      { id: 'cog_analogy', prompt: 'What analogies work for you when learning? (your native domain — engineering, cooking, music, sport, etc.)', type: 'longtext', section: 'Mental models they favor' },
+      { id: 'cog_analogy_no', prompt: 'Analogies that don\'t work for you?', type: 'text', section: 'Mental models they favor' },
+    ]
+  },
+
+  {
+    id: 'relationships',
+    title: 'Relationships & Social',
+    file: 'relationships.md',
+    frontmatter: { name: 'relationships', description: 'Social energy, relationship orientation, attachment style, and conflict patterns. Shapes how Claude frames advice involving other people.', type: 'relationships' },
+    intro: 'How you relate to others — energy, depth, attachment, conflict. This shapes how Claude frames any advice that involves people.',
+    questions: [
+      { id: 'r_io', prompt: 'Introvert, ambivert, or extravert?', type: 'single', section: 'Social energy', options: ['Introvert','Ambivert','Extravert','Depends on context'] },
+      { id: 'r_battery', prompt: 'Social battery size?', type: 'single', section: 'Social energy', options: ['Long night','Few hours','Quick drain','Variable'] },
+      { id: 'r_recharge', prompt: 'Recharge method?', type: 'single', section: 'Social energy', options: ['Solitude','One-on-one','Small group','Alone-with-activity','Varies'] },
+      { id: 'r_optimal', prompt: 'Optimal group size for you?', type: 'single', section: 'Social energy', options: ['1:1','3–5','6–10','Crowd energy'] },
+      { id: 'r_circle', prompt: 'Circle size?', type: 'single', section: 'Relationship orientation', options: ['Tight few','Wide network','Family-centric','Solo by default'] },
+      { id: 'r_depth', prompt: 'Depth vs. breadth in relationships?', type: 'scale', section: 'Relationship orientation', scale: 5, lowLabel:'Breadth', highLabel:'Depth' },
+      { id: 'r_make', prompt: 'How do you make friends?', type: 'single', section: 'Relationship orientation', options: ['Through activity','Through proximity','Through shared interests','Through existing friends','Rarely & intentionally'] },
+      { id: 'r_maintain', prompt: 'How do you maintain friendships?', type: 'single', section: 'Relationship orientation', options: ['Proactive initiator','Responder','Scheduled / regular','Spontaneous'] },
+      { id: 'r_attach', prompt: 'Default attachment pattern?', type: 'single', section: 'Attachment style', options: ['Secure','Anxious','Avoidant','Fearful / disorganized','Not sure'] },
+      { id: 'r_secure', prompt: 'What makes you feel secure in a relationship?', type: 'longtext', section: 'Attachment style', depends: [{ q:'r_attach', in:['Anxious','Avoidant','Fearful / disorganized','Not sure'] }] },
+      { id: 'r_insecure', prompt: 'What triggers your insecurity?', type: 'longtext', section: 'Attachment style', depends: [{ q:'r_attach', in:['Anxious','Avoidant','Fearful / disorganized','Not sure'] }] },
+      { id: 'r_status', prompt: 'Relationship status & structure?', type: 'text', section: 'Romantic orientation', placeholder: 'Single, partnered, married, poly, etc.' },
+      { id: 'r_love_give', prompt: 'Love language — giving?', type: 'single', section: 'Romantic orientation', options: ['Words of affirmation','Acts of service','Quality time','Gifts','Physical touch','N/A'] },
+      { id: 'r_love_recv', prompt: 'Love language — receiving?', type: 'single', section: 'Romantic orientation', options: ['Words of affirmation','Acts of service','Quality time','Gifts','Physical touch','N/A'] },
+      { id: 'r_need_partner', prompt: 'What do you most need from a partner?', type: 'longtext', section: 'Romantic orientation' },
+      { id: 'r_offer', prompt: 'What do you offer?', type: 'longtext', section: 'Romantic orientation' },
+      { id: 'r_conflict', prompt: 'Conflict style in relationships?', type: 'single', section: 'Conflict patterns', options: ['Avoid','Accommodate','Compromise','Confront','Collaborate'] },
+      { id: 'r_repair', prompt: 'How do you repair after conflict?', type: 'longtext', section: 'Conflict patterns' },
+      { id: 'r_redline', prompt: 'Red lines in relationships?', type: 'longtext', section: 'Conflict patterns' },
+      { id: 'r_role', prompt: 'Your role in a group?', type: 'single', section: 'Community & belonging', options: ['Leader','Glue','Contrarian','Quiet contributor','Host','Wildcard'] },
+      { id: 'r_newcomer', prompt: 'How do you handle being the newcomer?', type: 'longtext', section: 'Community & belonging' },
+      { id: 'r_lonely', prompt: 'When does loneliness hit you, and what do you do?', type: 'longtext', section: 'Community & belonging' },
+      { id: 'r_family_role', prompt: 'Your family role — origin and current?', type: 'longtext', section: 'Family' },
+      { id: 'r_boundaries', prompt: 'Boundaries with family?', type: 'longtext', section: 'Family' },
+    ]
+  },
+
+  {
+    id: 'stress',
+    title: 'Stress & Coping',
+    file: 'stress-response.md',
+    frontmatter: { name: 'stress-response', description: 'How this person experiences and copes with stress — signals, strategies, and recovery patterns. Critical for Claude recognizing strain and offering support that fits.', type: 'stress-response' },
+    intro: 'How stress shows up for you, and what actually helps. Claude uses this to recognize strain and offer support that fits — not generic coping advice.',
+    questions: [
+      { id: 's_first', prompt: 'When you\'re under pressure, what goes first?', type: 'single', section: 'Stress signals', options: ['Sleep','Decision quality','Mood','Best self','Kindness','Physical energy','Appetite','Other'] },
+      { id: 's_first_detail', prompt: 'What does that look like in practice?', type: 'longtext', section: 'Stress signals' },
+      { id: 's_signs', prompt: 'Early warning signs you\'re stressed?', help: 'Pick all that apply.', type: 'multi', section: 'Stress signals',
+        options: ['Physical (tension, headaches, gut)','Behavioral (snapping, withdrawing)','Cognitive (rumination, fog)','Emotional (irritability, flatness)'] },
+      { id: 's_body', prompt: 'Your body\'s stress tell — the specific thing?', type: 'text', section: 'Stress signals', depends: [{ q:'s_signs', in:['Physical (tension, headaches, gut)'] }] },
+      { id: 's_others', prompt: 'What do others notice before you do?', type: 'longtext', section: 'Stress signals' },
+      { id: 's_baseline', prompt: 'Your baseline stress level?', type: 'scale', section: 'Stress thresholds', scale: 10, lowLabel:'Low', highLabel:'High' },
+      { id: 's_perf', prompt: 'Performance under pressure?', type: 'single', section: 'Stress thresholds', options: ['I peak under pressure','I fold','Variable','Grind — slow and steady'] },
+      { id: 's_acute_chronic', prompt: 'Acute spikes vs. chronic grind — which is harder for you?', type: 'single', section: 'Stress thresholds', options: ['Spikes are harder','Grind is harder','Both equally','It depends'] },
+      { id: 'coping_healthy', prompt: 'Healthy strategies you actually use?', help: 'Pick all that apply.', type: 'multi', section: 'Coping strategies',
+        options: ['Exercise','Time in nature','Social connection','Alone time','Creative outlet','Breathwork / meditation','Sleep hygiene','Therapy','Journaling'] },
+      { id: 'coping_unhealthy', prompt: 'Unhealthy strategies you fall back on?', help: 'Pick all that apply. Be honest — this is private.', type: 'multi', section: 'Coping strategies',
+        options: ['Substances','Screens / doomscroll','Overwork','Withdrawal','Impulsive spending','Emotional eating','Canceling everything','Snapping at people','None really'] },
+      { id: 'coping_unsustainable', prompt: 'What works but isn\'t sustainable?', type: 'longtext', section: 'Coping strategies' },
+      { id: 'recovery_day', prompt: 'How do you reset after a hard day?', type: 'text', section: 'Recovery' },
+      { id: 'recovery_season', prompt: 'How do you reset after a hard season?', type: 'longtext', section: 'Recovery' },
+      { id: 'recovery_time', prompt: 'Time to bounce back from a setback?', type: 'single', section: 'Recovery', options: ['Hours','Days','Weeks','Variable'] },
+      { id: 'recovery_acc', prompt: 'What accelerates your recovery?', type: 'longtext', section: 'Recovery' },
+      { id: 'recovery_prolong', prompt: 'What prolongs it?', type: 'longtext', section: 'Recovery' },
+      { id: 'support_who', prompt: 'Who do you turn to?', type: 'single', section: 'Support', options: ['Partner','Friend','Family','Professional','No one','Mixed'] },
+      { id: 'support_kind', prompt: 'What kind of support do you actually want?', type: 'single', section: 'Support', options: ['Listening','Advice','Distraction','Presence','Space','It varies'] },
+      { id: 'support_unhelpful', prompt: 'What kind of support lands as unhelpful?', type: 'longtext', section: 'Support' },
+      { id: 'support_ask', prompt: 'Comfort with asking for help?', type: 'scale', section: 'Support', scale: 5, lowLabel:'Hate asking', highLabel:'Easy to ask' },
+      { id: 'burnout_past', prompt: 'Past experience with burnout?', type: 'single', section: 'Burnout', options: ['Never','Once','Multiple times','Currently / recently'] },
+      { id: 'burnout_sig', prompt: 'Your burnout signature — the pattern that signals it\'s coming?', type: 'longtext', section: 'Burnout' },
+      { id: 'burnout_seeit', prompt: 'What do you do when you see it coming?', type: 'longtext', section: 'Burnout' },
+      { id: 'no_easy', prompt: 'Saying no is...?', type: 'single', section: 'Boundaries & self-protection', options: ['Easy','Hard','Context-dependent','Skill I\'m building'] },
+      { id: 'no_protect', prompt: 'What do you protect no matter what?', type: 'longtext', section: 'Boundaries & self-protection' },
+      { id: 'no_sacrifice', prompt: 'What do you sacrifice first?', type: 'text', section: 'Boundaries & self-protection' },
+    ]
+  },
+
+  {
+    id: 'context',
+    title: 'Life Context',
+    file: 'life-context.md',
+    frontmatter: { name: 'life-context', description: 'Daily reality — routines, energy patterns, current season of life, and constraints. Grounds advice in what\'s actually possible for them right now.', type: 'life-context' },
+    intro: 'The daily reality advice has to fit. Routines, energy, and the season you\'re in — the constraints that make generic advice useless.',
+    questions: [
+      { id: 'l_season', prompt: 'Describe your current season of life in one line.', type: 'text', section: 'Current season of life', placeholder: 'e.g. "Scaling the startup while parenting a toddler."' },
+      { id: 'l_started', prompt: 'When did this season start?', type: 'single', section: 'Current season of life', options: ['Recently (weeks)','Months ago','About a year','Years ago'] },
+      { id: 'l_horizon', prompt: 'Expected to last?', type: 'single', section: 'Current season of life', options: ['Ending soon','Months more','A year+','Indefinite'] },
+      { id: 'l_optimizing', prompt: 'What are you optimizing for in this season?', type: 'longtext', section: 'Current season of life' },
+      { id: 'l_deprior', prompt: 'What are you deprioritizing?', type: 'longtext', section: 'Current season of life' },
+      { id: 'l_weekday', prompt: 'Typical weekday structure (high level):', type: 'longtext', section: 'Daily rhythm' },
+      { id: 'l_weekend', prompt: 'Typical weekend structure:', type: 'longtext', section: 'Daily rhythm' },
+      { id: 'l_morning', prompt: 'Morning routine — what do you do in the first hour?', type: 'text', section: 'Daily rhythm' },
+      { id: 'l_evening', prompt: 'Evening routine — what do you do in the last hour?', type: 'text', section: 'Daily rhythm' },
+      { id: 'l_sleep', prompt: 'Sleep — typical hours, consistency, quality?', type: 'text', section: 'Daily rhythm' },
+      { id: 'l_peak', prompt: 'Peak energy window?', type: 'single', section: 'Energy patterns', options: ['Morning','Afternoon','Evening','Late night','Variable'] },
+      { id: 'l_trough', prompt: 'When\'s your trough?', type: 'single', section: 'Energy patterns', options: ['Mid-morning','Post-lunch','Late afternoon','Evening','No clear trough'] },
+      { id: 'l_drain_energy', prompt: 'What drains your energy disproportionately?', type: 'longtext', section: 'Energy patterns' },
+      { id: 'l_restore', prompt: 'What restores it?', type: 'longtext', section: 'Energy patterns' },
+      { id: 'l_caffeine', prompt: 'Caffeine / stimulant relationship?', type: 'text', section: 'Energy patterns' },
+      { id: 'l_fixed', prompt: 'Fixed commitments that don\'t move in your calendar?', help: 'Pick all that apply.', type: 'multi', section: 'Constraints & commitments',
+        options: ['Work hours','Caregiving','Classes / study','Recurring meetings','Exercise','Faith / community','Therapy','Other recurring commitments'] },
+      { id: 'l_dependents', prompt: 'Who depends on you, and how?', type: 'longtext', section: 'Constraints & commitments' },
+      { id: 'l_time', prompt: 'Time posture — how scarce is your time right now?', type: 'single', section: 'Constraints & commitments', options: ['Abundant','Managed','Scarce','Overwhelmed'] },
+      { id: 'l_money', prompt: 'Financial posture right now?', type: 'single', section: 'Constraints & commitments', options: ['Stable','Building','Stretched','Abundant'] },
+      { id: 'l_health_cons', prompt: 'Health considerations affecting daily life?', type: 'longtext', section: 'Constraints & commitments' },
+      { id: 'l_living', prompt: 'Living situation — who\'s in your household?', type: 'text', section: 'Environment' },
+      { id: 'l_workspace', prompt: 'Workspace — where do you work?', type: 'text', section: 'Environment' },
+      { id: 'l_location', prompt: 'Location & climate?', type: 'text', section: 'Environment' },
+      { id: 'l_cog_load', prompt: 'Current cognitive load?', type: 'single', section: 'Capacity indicators', options: ['Low','Medium','High','Saturated'] },
+      { id: 'l_emo_load', prompt: 'Current emotional load?', type: 'single', section: 'Capacity indicators', options: ['Low','Medium','High','Saturated'] },
+      { id: 'l_bandwidth', prompt: 'Bandwidth for new commitments?', type: 'single', section: 'Capacity indicators', options: ['None','Some','Lots','I need to shed first'] },
+      { id: 'l_no', prompt: 'What are you saying no to right now?', type: 'longtext', section: 'Capacity indicators' },
+      { id: 'l_yes', prompt: 'What are you saying yes to right now?', type: 'longtext', section: 'Capacity indicators' },
+    ]
+  },
+
+  {
+    id: 'goals',
+    title: 'Goals & Aspirations',
+    file: 'goals.md',
+    frontmatter: { name: 'goals', description: 'Short and long-term goals, what success looks like, and what they\'re optimizing for. Anchors advice in where they\'re actually trying to go.', type: 'goals' },
+    intro: 'Where you\'re actually trying to go. Advice framed toward your real destination lands; advice framed generically doesn\'t.',
+    questions: [
+      { id: 'g_optimizing', prompt: 'What are you optimizing for in life right now?', type: 'longtext', section: 'Short-term goals' },
+      { id: 'g_short', prompt: 'Top 1–3 short-term goals (next 3 months):', type: 'longtext', section: 'Short-term goals' },
+      { id: 'g_short_why', prompt: 'Why these, why now?', type: 'longtext', section: 'Short-term goals' },
+      { id: 'g_short_success', prompt: 'What does success look like for each?', type: 'longtext', section: 'Short-term goals' },
+      { id: 'g_short_block', prompt: 'What\'s blocking you?', type: 'longtext', section: 'Short-term goals' },
+      { id: 'g_medium', prompt: 'Top 1–3 medium-term goals (3–12 months):', type: 'longtext', section: 'Medium-term goals' },
+      { id: 'g_medium_why', prompt: 'Why these?', type: 'longtext', section: 'Medium-term goals' },
+      { id: 'g_medium_milestones', prompt: 'Key milestones?', type: 'longtext', section: 'Medium-term goals' },
+      { id: 'g_long', prompt: 'Top 1–3 long-term goals (1–5 years):', type: 'longtext', section: 'Long-term goals' },
+      { id: 'g_long_success', prompt: 'What does success look like?', type: 'longtext', section: 'Long-term goals' },
+      { id: 'g_long_give', prompt: 'What would you give up to get there?', type: 'longtext', section: 'Long-term goals' },
+      { id: 'g_long_keep', prompt: 'What would you refuse to give up?', type: 'longtext', section: 'Long-term goals' },
+      { id: 'g_life', prompt: 'What do you want your life to look like in 5+ years?', type: 'longtext', section: 'Life goals' },
+      { id: 'g_built', prompt: 'What do you want to have built?', type: 'longtext', section: 'Life goals' },
+      { id: 'g_known', prompt: 'What do you want to be known for?', type: 'longtext', section: 'Life goals' },
+      { id: 'g_left', prompt: 'What do you want to leave behind?', type: 'longtext', section: 'Life goals' },
+      { id: 'g_made_it', prompt: 'How will you know you\'ve "made it"?', type: 'longtext', section: 'Definitions of success' },
+      { id: 'g_whose', prompt: 'Whose opinion of your success matters to you?', type: 'longtext', section: 'Definitions of success' },
+      { id: 'g_day', prompt: 'A "successful" day in your life looks like:', type: 'longtext', section: 'Definitions of success' },
+      { id: 'g_year', prompt: 'A "successful" year looks like:', type: 'longtext', section: 'Definitions of success' },
+      { id: 'g_tension', prompt: 'Goals in tension — which compete for the same resources?', type: 'longtext', section: 'Goals in tension' },
+      { id: 'g_prioritizing', prompt: 'How are you prioritizing between them?', type: 'longtext', section: 'Goals in tension' },
+      { id: 'g_anti', prompt: 'Anti-goals — futures you\'re actively avoiding:', type: 'longtext', section: 'Anti-goals' },
+      { id: 'g_avoid', prompt: 'What would "failure" look like — and would you accept it?', type: 'longtext', section: 'Anti-goals' },
+      { id: 'g_crushed', prompt: 'Goals you\'ve crushed in the past:', type: 'longtext', section: 'Past goal patterns' },
+      { id: 'g_abandoned', prompt: 'Goals you\'ve abandoned:', type: 'longtext', section: 'Past goal patterns' },
+      { id: 'g_difference', prompt: 'What made the difference between the two?', type: 'longtext', section: 'Past goal patterns' },
+      { id: 'g_blind', prompt: 'Your goal-setting blind spot?', type: 'longtext', section: 'Past goal patterns' },
+    ]
+  },
+];
+
+/* ---------- State ---------- */
+let state = {
+  view: 'welcome',        // welcome | category | review
+  catIndex: 0,
+  answers: {},            // { questionId: value }
+};
+
+/* ---------- Persistence ---------- */
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ answers: state.answers, catIndex: state.catIndex }));
+  } catch(e) { /* localStorage unavailable */ }
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (data.answers) state.answers = data.answers;
+    if (typeof data.catIndex === 'number') state.catIndex = data.catIndex;
+    return true;
+  } catch(e) { return false; }
+}
+
+/* ---------- Branching: determine if a question is visible ---------- */
+function isQuestionVisible(question) {
+  if (!question.depends) return true;
+  return question.depends.every(dep => {
+    const val = state.answers[dep.q];
+    if (val === undefined || val === null || val === '') return false;
+    if (dep.in !== undefined) {
+      if (Array.isArray(val)) return dep.in.some(v => val.includes(v));
+      return dep.in.includes(val);
+    }
+    if (dep.min !== undefined) {
+      const n = Number(val); return !isNaN(n) && n >= dep.min;
+    }
+    if (dep.max !== undefined) {
+      const n = Number(val); return !isNaN(n) && n <= dep.max;
+    }
+    if (dep.exists !== undefined) {
+      return dep.exists ? (val !== '' && val !== undefined) : (val === '' || val === undefined);
+    }
+    return true;
+  });
+}
+
+/* ---------- Answer shortcuts ---------- */
+function isAnswered(qId) {
+  const v = state.answers[qId];
+  if (v === undefined || v === null) return false;
+  if (typeof v === 'string' && v.trim() === '') return false;
+  if (Array.isArray(v) && v.length === 0) return false;
+  return true;
+}
+
+function categoryAnsweredCount(cat) {
+  return cat.questions.filter(q => isAnswered(q.id)).length;
+}
+function categoryVisibleCount(cat) {
+  return cat.questions.filter(q => isQuestionVisible(q)).length;
+}
+function categoryIsComplete(cat) {
+  const visible = cat.questions.filter(q => isQuestionVisible(q));
+  if (visible.length === 0) return false;
+  return visible.every(q => isAnswered(q.id));
+}
+function totalAnswered() {
+  let n = 0;
+  CATEGORIES.forEach(cat => { n += cat.questions.filter(q => isAnswered(q.id) && isQuestionVisible(q)).length; });
+  return n;
+}
+function totalVisible() {
+  let n = 0;
+  CATEGORIES.forEach(cat => { n += cat.questions.filter(q => isQuestionVisible(q)).length; });
+  return n;
+}
+
+/* ---------- Render: palace bar rooms ---------- */
+function renderRooms() {
+  const container = document.getElementById('rooms');
+  container.innerHTML = '';
+  CATEGORIES.forEach((cat, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'room-dot';
+    if (state.view === 'category' && i === state.catIndex) dot.classList.add('current');
+    if (categoryIsComplete(cat)) dot.classList.add('completed');
+    dot.dataset.name = cat.title;
+    dot.title = cat.title;
+    dot.addEventListener('click', () => {
+      state.catIndex = i;
+      state.view = 'category';
+      render();
+    });
+    container.appendChild(dot);
+  });
+  const pct = totalVisible() === 0 ? 0 : Math.round((totalAnswered() / totalVisible()) * 100);
+  document.getElementById('progressPct').textContent = pct + '%';
+}
+
+/* ---------- Render: a single question ---------- */
+function renderQuestion(cat, q) {
+  const wrap = document.createElement('div');
+  wrap.className = 'question';
+  wrap.dataset.qid = q.id;
+  if (!isQuestionVisible(q)) { wrap.classList.add('hidden'); return wrap; }
+
+  const num = document.createElement('span');
+  num.className = 'q-id';
+  num.textContent = q.id;
+  wrap.appendChild(num);
+
+  const prompt = document.createElement('div');
+  prompt.className = 'q-prompt';
+  prompt.textContent = q.prompt;
+  wrap.appendChild(prompt);
+
+  if (q.help) {
+    const help = document.createElement('div');
+    help.className = 'q-help';
+    help.textContent = q.help;
+    wrap.appendChild(help);
+  }
+
+  const value = state.answers[q.id];
+
+  if (q.type === 'single' || q.type === 'multi') {
+    const opts = document.createElement('div');
+    opts.className = 'options';
+    q.options.forEach(opt => {
+      const o = document.createElement('div');
+      const isMulti = q.type === 'multi';
+      o.className = 'opt' + (isMulti ? ' multi' : '');
+      const val = typeof opt === 'string' ? opt : opt.v;
+      const selected = isMulti ? (Array.isArray(value) && value.includes(val)) : (value === val);
+      if (selected) o.classList.add('selected');
+      const mark = document.createElement('div');
+      mark.className = 'opt-mark';
+      const label = document.createElement('div');
+      label.className = 'opt-label';
+      label.textContent = val;
+      if (typeof opt !== 'string' && opt.d) {
+        const desc = document.createElement('span');
+        desc.className = 'opt-desc';
+        desc.textContent = opt.d;
+        label.appendChild(desc);
+      }
+      o.appendChild(mark);
+      o.appendChild(label);
+      o.addEventListener('click', () => {
+        if (isMulti) {
+          let arr = Array.isArray(value) ? [...value] : [];
+          if (arr.includes(val)) arr = arr.filter(x => x !== val);
+          else {
+            if (q.max && arr.length >= q.max) { showToast(`Pick at most ${q.max}`); return; }
+            arr.push(val);
+          }
+          state.answers[q.id] = arr;
+        } else {
+          state.answers[q.id] = val;
+        }
+        saveState();
+        // re-render this question's selected state, then re-evaluate branch visibility
+        renderQuestionSelectedState(opts, q);
+        reRenderBranching(cat);
+        updateProgressAfterAnswer();
+      });
+      opts.appendChild(o);
+    });
+    wrap.appendChild(opts);
+  }
+
+  else if (q.type === 'scale') {
+    const scaleWrap = document.createElement('div');
+    scaleWrap.className = 'scale-wrap';
+    const track = document.createElement('div');
+    track.className = 'scale-track';
+    const bar = document.createElement('div'); bar.className = 'scale-bar'; track.appendChild(bar);
+    const fill = document.createElement('div'); fill.className = 'scale-fill'; track.appendChild(fill);
+    const input = document.createElement('input');
+    input.type = 'range'; input.className = 'scale-input';
+    input.min = 1; input.max = q.scale || 5; input.step = 1;
+    input.value = value !== undefined ? value : Math.ceil((q.scale||5)/2);
+    track.appendChild(input);
+    scaleWrap.appendChild(track);
+    const labels = document.createElement('div');
+    labels.className = 'scale-labels';
+    const lL = document.createElement('span'); lL.textContent = q.lowLabel || 'Low'; labels.appendChild(lL);
+    const hL = document.createElement('span'); hL.textContent = q.highLabel || 'High'; labels.appendChild(hL);
+    scaleWrap.appendChild(labels);
+    const valLabel = document.createElement('div');
+    valLabel.className = 'scale-value';
+    valLabel.textContent = input.value + ' / ' + (q.scale||5);
+    scaleWrap.appendChild(valLabel);
+    const updateFill = () => {
+      const pct = ((input.value - 1) / ((q.scale||5) - 1)) * 100;
+      fill.style.width = pct + '%';
+      valLabel.textContent = input.value + ' / ' + (q.scale||5);
+    };
+    updateFill();
+    input.addEventListener('input', () => {
+      state.answers[q.id] = Number(input.value);
+      updateFill();
+    });
+    input.addEventListener('change', () => {
+      saveState();
+      updateProgressAfterAnswer();
+    });
+    wrap.appendChild(scaleWrap);
+  }
+
+  else if (q.type === 'text') {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'text-input';
+    input.value = value || '';
+    input.placeholder = q.placeholder || '';
+    input.addEventListener('input', () => { state.answers[q.id] = input.value; });
+    input.addEventListener('change', () => { saveState(); updateProgressAfterAnswer(); });
+    wrap.appendChild(input);
+  }
+
+  else if (q.type === 'longtext') {
+    const ta = document.createElement('textarea');
+    ta.className = 'textarea-input';
+    ta.value = value || '';
+    ta.placeholder = q.placeholder || '';
+    ta.rows = 3;
+    ta.addEventListener('input', () => { state.answers[q.id] = ta.value; });
+    ta.addEventListener('change', () => { saveState(); updateProgressAfterAnswer(); });
+    wrap.appendChild(ta);
+  }
+
+  return wrap;
+}
+
+function renderQuestionSelectedState(optsEl, q) {
+  // re-apply selected classes from state
+  const isMulti = q.type === 'multi';
+  const value = state.answers[q.id];
+  Array.from(optsEl.children).forEach(o => {
+    // get text from .opt-label without the desc
+    const labelEl = o.querySelector('.opt-label');
+    const val = labelEl ? labelEl.firstChild.textContent.trim() : '';
+    const selected = isMulti ? (Array.isArray(value) && value.includes(val)) : (value === val);
+    o.classList.toggle('selected', selected);
+  });
+}
+
+function reRenderBranching(cat) {
+  // re-evaluate visibility for all questions in current category
+  const container = document.getElementById('questions-container');
+  if (!container) return;
+  Array.from(container.children).forEach(child => {
+    const qid = child.dataset.qid;
+    const q = cat.questions.find(x => x.id === qid);
+    if (q) {
+      const visible = isQuestionVisible(q);
+      child.classList.toggle('hidden', !visible);
+    }
+  });
+}
+
+function updateProgressAfterAnswer() {
+  renderRooms();
+  const status = document.getElementById('navStatus');
+  if (status) {
+    const cat = CATEGORIES[state.catIndex];
+    status.textContent = `${categoryAnsweredCount(cat)} / ${categoryVisibleCount(cat)} answered`;
+  }
+}
+
+/* ---------- Render: category view ---------- */
+function renderCategory() {
+  const app = document.getElementById('app');
+  const cat = CATEGORIES[state.catIndex];
+  app.innerHTML = '';
+
+  const intro = document.createElement('div');
+  intro.className = 'category-intro';
+  intro.innerHTML = `
+    <div class="cat-eyebrow">Room ${state.catIndex + 1} of ${CATEGORIES.length}</div>
+    <h2>${cat.title}</h2>
+    <p>${cat.intro}</p>
+  `;
+  app.appendChild(intro);
+
+  const container = document.createElement('div');
+  container.className = 'questions';
+  container.id = 'questions-container';
+  cat.questions.forEach(q => container.appendChild(renderQuestion(cat, q)));
+  app.appendChild(container);
+
+  const nav = document.createElement('div');
+  nav.className = 'nav-row';
+
+  const prev = document.createElement('button');
+  prev.className = 'nav-btn';
+  prev.textContent = '← Previous';
+  prev.disabled = state.catIndex === 0 && state.view === 'category';
+  prev.addEventListener('click', () => {
+    if (state.catIndex === 0) return;
+    state.catIndex--;
+    window.scrollTo({top:0, behavior:'smooth'});
+    render();
+  });
+  nav.appendChild(prev);
+
+  const status = document.createElement('div');
+  status.className = 'nav-status';
+  status.id = 'navStatus';
+  status.textContent = `${categoryAnsweredCount(cat)} / ${categoryVisibleCount(cat)} answered`;
+  nav.appendChild(status);
+
+  const next = document.createElement('button');
+  next.className = 'nav-btn primary';
+  next.textContent = state.catIndex === CATEGORIES.length - 1 ? 'Review & Export →' : 'Next →';
+  next.addEventListener('click', () => {
+    if (state.catIndex < CATEGORIES.length - 1) {
+      state.catIndex++;
+      window.scrollTo({top:0, behavior:'smooth'});
+      render();
+    } else {
+      state.view = 'review';
+      window.scrollTo({top:0, behavior:'smooth'});
+      render();
+    }
+  });
+  nav.appendChild(next);
+  app.appendChild(nav);
+}
+
+/* ---------- Render: welcome ---------- */
+function renderWelcome(hasSaved) {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  const w = document.createElement('div');
+  w.className = 'welcome';
+  const totalQ = CATEGORIES.reduce((n, c) => n + c.questions.length, 0);
+  w.innerHTML = `
+    <div class="eyebrow">MindPalace · Tier 1</div>
+    <h1>Build the <em>dossier</em> that makes every answer personal.</h1>
+    <p>This questionnaire maps your personality across ten domains — identity, temperament, values, communication, motivation, cognition, relationships, stress, life context, and goals. Your answers are exported as structured markdown files Claude reads on demand, so its answers are grounded in who you actually are instead of whatever fits in a context window.</p>
+    <p>Each room opens with a broad question, then branches based on your answers — so you only see the questions that matter to someone like you.</p>
+    <div class="meta-row">
+      <div class="meta-item"><div class="meta-num">10</div><div class="meta-label">Domains</div></div>
+      <div class="meta-item"><div class="meta-num">${totalQ}</div><div class="meta-label">Questions</div></div>
+      <div class="meta-item"><div class="meta-num">~25m</div><div class="meta-label">To complete</div></div>
+    </div>
+    <p style="font-size:13px;color:var(--slate);">Your answers are stored locally in your browser and never leave your device until you export them. You can pause and resume — progress autosaves.</p>
+    <div>
+      <button class="start-btn" id="startBtn">Begin →</button>
+      ${hasSaved ? `<button class="resume-btn" id="resumeBtn">Resume where you left off</button>` : ''}
+    </div>
+  `;
+  app.appendChild(w);
+  document.getElementById('startBtn').addEventListener('click', () => {
+    state.view = 'category';
+    state.catIndex = 0;
+    render();
+  });
+  if (hasSaved) {
+    document.getElementById('resumeBtn').addEventListener('click', () => {
+      state.view = 'category';
+      render();
+    });
+  }
+}
+
+/* ---------- Render: review & export ---------- */
+function renderReview() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  const intro = document.createElement('div');
+  intro.className = 'review-intro';
+  intro.innerHTML = `
+    <h2>Review & Export</h2>
+    <p>${totalAnswered()} of ${totalVisible()} questions answered. Export the markdown files into your <code style="font-family:var(--font-mono);font-size:12px;">personality/</code> folder.</p>
+  `;
+  app.appendChild(intro);
+
+  const grid = document.createElement('div');
+  grid.className = 'review-grid';
+  CATEGORIES.forEach((cat, i) => {
+    const card = document.createElement('div');
+    card.className = 'review-card';
+    if (categoryIsComplete(cat)) card.classList.add('complete');
+    card.innerHTML = `
+      <h3>${cat.title}</h3>
+      <div class="count"><span class="status-dot"></span>${categoryAnsweredCount(cat)} / ${categoryVisibleCount(cat)} answered · <em style="color:var(--brass);cursor:pointer;text-decoration:underline;">edit</em></div>
+    `;
+    card.querySelector('em').style.fontStyle = 'normal';
+    card.addEventListener('click', () => {
+      state.catIndex = i;
+      state.view = 'category';
+      render();
+    });
+    grid.appendChild(card);
+  });
+  app.appendChild(grid);
+
+  const exportSec = document.createElement('div');
+  exportSec.className = 'export-section';
+  exportSec.innerHTML = `
+    <h3>Export your palace</h3>
+    <p>Download each file into <code style="font-family:var(--font-mono);font-size:12px;">MindPalace/personality/</code> — overwriting the stub files. Then update INDEX.md's "At a glance" summary.</p>
+    <div class="file-list" id="fileList"></div>
+    <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="mini-btn all" id="downloadAll">Download all files (.zip via separate downloads)</button>
+      <button class="mini-btn" id="copyIndex">Copy INDEX.md</button>
+      <button class="mini-btn" id="previewBtn">Toggle preview</button>
+    </div>
+    <textarea class="preview-area" id="previewArea" style="display:none;" readonly></textarea>
+  `;
+  app.appendChild(exportSec);
+
+  const fileList = document.getElementById('fileList');
+
+  // one row per domain file
+  CATEGORIES.forEach(cat => {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+    row.innerHTML = `
+      <code>personality/${cat.file}</code>
+      <div class="file-btns">
+        <button class="mini-btn dl">Download</button>
+        <button class="mini-btn cp">Copy</button>
+      </div>
+    `;
+    row.querySelector('.dl').addEventListener('click', () => downloadMarkdown(cat));
+    row.querySelector('.cp').addEventListener('click', () => {
+      copyToClipboard(generateMarkdown(cat));
+      showToast('Copied ' + cat.file);
+    });
+    fileList.appendChild(row);
+  });
+
+  document.getElementById('downloadAll').addEventListener('click', () => {
+    CATEGORIES.forEach((cat, i) => {
+      setTimeout(() => downloadMarkdown(cat), i * 250);
+    });
+    setTimeout(() => downloadIndex(), CATEGORIES.length * 250 + 200);
+  });
+  document.getElementById('copyIndex').addEventListener('click', () => {
+    copyToClipboard(generateIndex());
+    showToast('Copied INDEX.md');
+  });
+  document.getElementById('previewBtn').addEventListener('click', () => {
+    const pa = document.getElementById('previewArea');
+    const showing = pa.style.display === 'none';
+    if (showing) {
+      pa.value = generateIndex() + '\n\n' + CATEGORIES.map(generateMarkdown).join('\n\n---\n\n');
+    }
+    pa.style.display = showing ? 'block' : 'none';
+  });
+
+  // back to last category
+  const backRow = document.createElement('div');
+  backRow.className = 'nav-row';
+  backRow.innerHTML = `<button class="nav-btn" id="backBtn">← Back to questions</button>`;
+  app.appendChild(backRow);
+  document.getElementById('backBtn').addEventListener('click', () => {
+    state.view = 'category';
+    render();
+  });
+}
+
+/* ---------- Markdown generation ---------- */
+function formatAnswer(q) {
+  const v = state.answers[q.id];
+  if (v === undefined || v === null || v === '') return '_(not answered)_';
+  if (Array.isArray(v)) {
+    if (v.length === 0) return '_(none selected)_';
+    return v.map(x => '- ' + x).join('\n');
+  }
+  return String(v).trim() || '_(blank)_';
+}
+
+function generateMarkdown(cat) {
+  let out = '---\n';
+  Object.entries(cat.frontmatter).forEach(([k,v]) => { out += `${k}: ${v}\n`; });
+  out += `domain: personality\nupdated: ${today()}\n---\n\n`;
+  out += `# ${cat.title}\n\n> Populated by the MindPalace questionnaire on ${today()}.\n`;
+
+  // group questions by section
+  const sections = {};
+  const sectionOrder = [];
+  cat.questions.forEach(q => {
+    const sec = q.section || 'General';
+    if (!sections[sec]) { sections[sec] = []; sectionOrder.push(sec); }
+    sections[sec].push(q);
+  });
+
+  sectionOrder.forEach(sec => {
+    out += `\n## ${sec}\n\n`;
+    sections[sec].forEach(q => {
+      out += `**${q.prompt}**\n\n${formatAnswer(q)}\n\n`;
+    });
+  });
+
+  return out;
+}
+
+function generateIndex() {
+  let out = '---\nname: palace-index\ndescription: Always-loaded map of the MindPalace — who this person is and where each piece of their dossier lives. Claude reads this first to orient every query.\ntype: index\nupdated: ' + today() + '\n---\n\n# MindPalace Index\n\n> This file is always loaded into Claude\'s context. Keep it short — one screen. It orients every query; the detailed records live in the files below and are pulled on demand.\n\n## At a glance\n\n';
+  const quick = [
+    ['Name / how they refer to themself', 'i_one_line'],
+    ['Current life stage', 'i_stage'],
+    ['Current season of life', 'l_season'],
+    ['Top values', 'v_top'],
+    ['Communication style (directness 1-10)', 'c_direct'],
+    ['What gets them out of bed', 'm_driver'],
+    ['Decision style', 'cog_decide'],
+    ['Social orientation', 'r_io'],
+    ['What goes first under pressure', 's_first'],
+    ['Optimizing for right now', 'g_optimizing'],
+  ];
+  quick.forEach(([label, qid]) => {
+    const v = state.answers[qid];
+    const display = (v === undefined || v === null || v === '') ? '_(not yet answered)_' : (Array.isArray(v) ? v.join(', ') : String(v));
+    out += `- **${label}:** ${display}\n`;
+  });
+
+  out += '\n## Palace map\n\n### Personality tier (populated via the questionnaire app)\n\n';
+  out += '| Domain | File | What it captures |\n|---|---|---|\n';
+  const captures = {
+    'Identity & Roles': 'Demographics, life stage, roles, self-narrative',
+    'Personality Traits & Temperament': 'Big Five markers, temperament, dispositions',
+    'Values & Philosophy': 'Core values, beliefs, money/health mindset',
+    'Communication Style': 'Tone, formality, directness, information preferences',
+    'Motivation & Drive': 'What energizes them, goals, what kills motivation',
+    'Cognitive Patterns': 'Decision-making, problem-solving, learning style',
+    'Relationships & Social': 'Social energy, circle, attachment style, conflict style',
+    'Stress & Coping': 'Stress signals, coping strategies, recovery patterns',
+    'Life Context': 'Daily routine, energy patterns, current season of life',
+    'Goals & Aspirations': 'Short/long-term goals, what success looks like',
+  };
+  CATEGORIES.forEach(cat => {
+    out += `| ${cat.title} | \`personality/${cat.file}\` | ${captures[cat.title] || ''} |\n`;
+  });
+
+  out += '\n### Future tiers (not yet built)\n- **Structured core** — health, finance, mind domains (Tier 1 expansion)\n- **Unstructured index** — journals, logs, transcripts (Tier 2, hybrid embedding layer)\n\n## How to use this palace\n\n1. **Read this index first** for orientation — it\'s always in your context.\n2. **Before answering a query,** read the most relevant domain file(s) from the map above. Don\'t guess at the user\'s preferences — pull the record.\n3. **After learning something new about the user,** offer to write it to the appropriate record so the palace stays current.\n4. **Check the `updated:` date** on any record you read — if it\'s stale, flag it before relying on it.\n5. **Produce synthesis, not regurgitation** — the data is an input to better answers, not the answer itself.\n';
+
+  return out;
+}
+
+function downloadMarkdown(cat) {
+  const content = generateMarkdown(cat);
+  downloadFile(`personality_${cat.file}`, content);
+}
+function downloadIndex() {
+  downloadFile('INDEX.md', generateIndex());
+}
+function downloadFile(filename, content) {
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ---------- Clipboard & toast ---------- */
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text);
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+}
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+/* ---------- Main render ---------- */
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  if (state.view === 'welcome') {
+    renderWelcome(false);
+  } else if (state.view === 'category') {
+    renderCategory();
+  } else if (state.view === 'review') {
+    renderReview();
+  }
+  renderRooms();
+  saveState();
+}
+
+/* ---------- Init ---------- */
+function init() {
+  const hasSaved = loadState();
+  if (hasSaved && Object.keys(state.answers).length > 0) {
+    // show welcome with resume option
+    state.view = 'welcome';
+  }
+  render();
+}
+init();
+</script>
+</body>
+</html>
