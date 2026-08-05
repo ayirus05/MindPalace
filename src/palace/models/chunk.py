@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -45,7 +45,7 @@ class ChunkMetadata(BaseModel):
     source_file: str
     source_file_hash: str
     domain: DocumentDomain = DocumentDomain.UNKNOWN
-    date: date | None = None
+    date: Optional[date]
     tags: list[str] = Field(default_factory=list)
     content_hash: str
     word_count: int = 0
@@ -88,7 +88,7 @@ class RawHit(BaseModel):
     content: str
     score: float
     source_file: str
-    date: date | None = None
+    date: Optional[date] = None
     domain: DocumentDomain = DocumentDomain.UNKNOWN
     tags: list[str] = Field(default_factory=list)
     word_count: int = 0
@@ -102,7 +102,7 @@ class SearchResult(BaseModel):
     content: str
     score: float
     source_file: str
-    date: date | None = None
+    date: Optional[date] = None
     domain: DocumentDomain = DocumentDomain.UNKNOWN
     tags: list[str] = Field(default_factory=list)
     chunk_id: str
@@ -118,7 +118,7 @@ class IndexStats(BaseModel):
     unique_source_files: int = 0
     by_domain: dict[str, int] = Field(default_factory=dict)
     by_extension: dict[str, int] = Field(default_factory=dict)
-    date_range_earliest: date | None = None
-    date_range_latest: date | None = None
+    date_range_earliest: Optional[date] = None
+    date_range_latest: Optional[date] = None
     db_path: str = ""
-    last_indexed_at: datetime | None = None
+    last_indexed_at: Optional[datetime] = None

@@ -17,7 +17,7 @@ from typing import Protocol, runtime_checkable
 from palace.metadata.extractor import MetadataExtractor
 from palace.models.chunk import Chunk, ChunkMetadata, DocumentDomain
 from palace.models.config import ChunkerConfig
-from palace.utils.hashing import TextEstimator
+from palace.utils.hashing import TextEstimator, sha256_text
 
 
 logger = logging.getLogger("palace.chunker")
