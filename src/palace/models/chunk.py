@@ -88,7 +88,7 @@ class RawHit(BaseModel):
     content: str
     score: float
     source_file: str
-    date: Optional[date] = None
+    date: Optional[date]
     domain: DocumentDomain = DocumentDomain.UNKNOWN
     tags: list[str] = Field(default_factory=list)
     word_count: int = 0
@@ -102,7 +102,7 @@ class SearchResult(BaseModel):
     content: str
     score: float
     source_file: str
-    date: Optional[date] = None
+    date: Optional[date]
     domain: DocumentDomain = DocumentDomain.UNKNOWN
     tags: list[str] = Field(default_factory=list)
     chunk_id: str
@@ -118,7 +118,7 @@ class IndexStats(BaseModel):
     unique_source_files: int = 0
     by_domain: dict[str, int] = Field(default_factory=dict)
     by_extension: dict[str, int] = Field(default_factory=dict)
-    date_range_earliest: Optional[date] = None
-    date_range_latest: Optional[date] = None
+    date_range_earliest: Optional[date]
+    date_range_latest: Optional[date]
     db_path: str = ""
-    last_indexed_at: Optional[datetime] = None
+    last_indexed_at: Optional[datetime]

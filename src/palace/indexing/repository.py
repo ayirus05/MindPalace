@@ -90,6 +90,7 @@ class LanceDBRepository:
     subsequent opens reuse it.  All public methods are safe to call
     repeatedly.
     """
+    VECTOR_DIM = 768
 
     SCHEMA = pa.schema([
         pa.field("chunk_id", pa.string()),
@@ -104,7 +105,7 @@ class LanceDBRepository:
         pa.field("created_at", pa.string()),
         pa.field("updated_at", pa.string()),
         pa.field("content", pa.string()),
-        pa.field("vector", pa.list_(pa.float32())),
+        pa.field("vector", pa.list_(pa.float32(), VECTOR_DIM)),
     ])
 
     def __init__(self, db_path: str | Path, table_name: str = "chunks") -> None:
@@ -191,6 +192,7 @@ class LanceDBRepository:
     def update_chunks(self, source_file: str, chunks: list[Chunk]) -> int:
         """Replace all chunks for ``source_file`` with ``chunks``."""
         self.delete_chunks(source_file)
+        print("Sample chunk embedding length:", len(chunks[0].embedding if chunks else 0))
         return self.insert_chunks(chunks)
 
     # -- reads --
@@ -211,13 +213,12 @@ class LanceDBRepository:
         """
         self._ensure_table()
         filter_sql = self._build_filter_sql(domain, date_from, date_to, tags)
-        query_kwargs: dict[str, Any] = {
-            "query": query_vector,
-            "limit": top_k,
-        }
+        query = self._table.search(query_vector, vector_column_name="vector")
+
         if filter_sql:
-            query_kwargs["where"] = filter_sql
-        results = self._table.search(**query_kwargs).to_list()
+            query = query.where(filter_sql)
+
+        results = query.limit(top_k).to_list()
         return [self._row_to_dict(r) for r in results]
 
     def _build_filter_sql(
