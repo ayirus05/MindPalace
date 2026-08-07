@@ -62,6 +62,15 @@ class SearchConfig(BaseModel):
     domain_weights: dict[str, float] = Field(default_factory=dict)
 
 
+class VaultConfig(BaseModel):
+    """Paths for the exact-match, file-backed Core Vault."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    system_lockers_dir: str = "vault/system"
+    user_lockers_dir: str = "vault/user"
+
+
 class LoggingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -80,6 +89,7 @@ class PalaceConfig(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     indexer: IndexerConfig = Field(default_factory=IndexerConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
+    vault: VaultConfig = Field(default_factory=VaultConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     project_root: Path = Path(".")
 

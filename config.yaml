@@ -63,6 +63,12 @@ search:
     notes: 1.0
     transcript: 0.9
 
+# --- Core Vault ---
+# JSON lockers are kept separate from the embedding-backed archival index.
+vault:
+  system_lockers_dir: "vault/system"
+  user_lockers_dir: "vault/user"
+
 # --- Logging ---
 logging:
   level: "INFO"
