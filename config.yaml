@@ -25,7 +25,7 @@ chunker:
 
 # --- LanceDB ---
 database:
-  path: "index/vector.lancedb"
+  path: "data/index/vector.lancedb"
   table_name: "chunks"
   # Cosine similarity is the default for nomic-embed-text.
   metric: "cosine"
@@ -34,13 +34,13 @@ database:
 indexer:
   # Directories to scan for source documents. Each is walked recursively.
   source_dirs:
-    - "journals"
+    - "data/source_docs/journals"
   # File extensions to index.
   extensions:
     - ".md"
     - ".txt"
   # Path to the content-hash cache (for incremental indexing).
-  hash_cache_path: "cache/hash_cache.json"
+  hash_cache_path: "data/cache/hash_cache.json"
 
 # --- Search ---
 search:
@@ -66,8 +66,8 @@ search:
 # --- Core Vault ---
 # JSON lockers are kept separate from the embedding-backed archival index.
 vault:
-  system_lockers_dir: "vault/system"
-  user_lockers_dir: "vault/user"
+  system_lockers_dir: "data/vault/system"
+  user_lockers_dir: "data/vault/user"
 
 # --- Logging ---
 logging:
@@ -75,4 +75,4 @@ logging:
   # Rich table pretty-printing in console.
   rich_output: true
   # Log file (set to null to disable).
-  file_path: "cache/palace.log"
+  file_path: "data/logs/palace.log"

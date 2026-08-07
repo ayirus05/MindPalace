@@ -37,7 +37,7 @@ class ChunkerConfig(BaseModel):
 class DatabaseConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    path: str = "index/vector.lancedb"
+    path: str = "data/index/vector.lancedb"
     table_name: str = "chunks"
     metric: str = "cosine"
 
@@ -45,9 +45,11 @@ class DatabaseConfig(BaseModel):
 class IndexerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source_dirs: list[str] = Field(default_factory=lambda: ["journals"])
+    source_dirs: list[str] = Field(
+        default_factory=lambda: ["data/source_docs/journals"]
+    )
     extensions: list[str] = Field(default_factory=lambda: [".md", ".txt"])
-    hash_cache_path: str = "cache/hash_cache.json"
+    hash_cache_path: str = "data/cache/hash_cache.json"
 
 
 class SearchConfig(BaseModel):
@@ -67,8 +69,8 @@ class VaultConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    system_lockers_dir: str = "vault/system"
-    user_lockers_dir: str = "vault/user"
+    system_lockers_dir: str = "data/vault/system"
+    user_lockers_dir: str = "data/vault/user"
 
 
 class LoggingConfig(BaseModel):
@@ -76,7 +78,7 @@ class LoggingConfig(BaseModel):
 
     level: str = "INFO"
     rich_output: bool = True
-    file_path: str | None = "cache/palace.log"
+    file_path: str | None = "data/logs/palace.log"
 
 
 class PalaceConfig(BaseModel):

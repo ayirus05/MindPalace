@@ -32,3 +32,8 @@ cache/
 # OS
 .DS_Store
 Thumbs.db
+
+# Data (Memories)
+data/**
+!data/**/
+!data/**/.gitkeep
