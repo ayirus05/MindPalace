@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 from datetime import date
+from enum import Enum
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -26,6 +27,7 @@ from palace.indexing.repository import ChunkRepository, LanceDBRepository
 from palace.models.config import PalaceConfig
 from palace.search.engine import SemanticSearchEngine
 from palace.utils.logging import configure_logging
+from palace.vault.manager import FileVaultManager
 
 
 app = typer.Typer(
@@ -35,6 +37,8 @@ app = typer.Typer(
     rich_markup_mode="rich",
     add_completion=False,
 )
+vault_app = typer.Typer(name="vault", help="Manage Core Vault memory lockers.")
+app.add_typer(vault_app, name="vault")
 console = Console()
 
 
@@ -89,6 +93,64 @@ ConfigOption = Annotated[
     Optional[Path],
     typer.Option("--config", "-c", help="Path to config.yaml"),
 ]
+
+
+class VaultLockerType(str, Enum):
+    """Supported Core Vault locker scopes."""
+
+    all = "all"
+    system = "system"
+    user = "user"
+
+
+@vault_app.command("list")
+def list_vault_lockers(
+    locker_type: Annotated[
+        VaultLockerType,
+        typer.Option("--type", help="Locker scope to list."),
+    ] = VaultLockerType.all,
+    config_path: ConfigOption = None,
+) -> None:
+    """List active Core Vault lockers."""
+    config = _load_config(config_path)
+    lockers = FileVaultManager(config).list_lockers(locker_type.value)
+
+    if not lockers:
+        console.print("[yellow]No active lockers.[/yellow]")
+        return
+
+    table = Table(title=f"Core Vault lockers ({locker_type.value})")
+    table.add_column("Locker", style="cyan")
+    for locker in lockers:
+        table.add_row(locker)
+    console.print(table)
+
+
+@vault_app.command("read")
+def read_vault_field(
+    locker_name: Annotated[str, typer.Argument(help="Locker name.")],
+    field_key: Annotated[str, typer.Argument(help="Field key.")],
+    config_path: ConfigOption = None,
+) -> None:
+    """Read a field from a Core Vault locker."""
+    config = _load_config(config_path)
+    value = FileVaultManager(config).read_field(locker_name, field_key)
+    console.print(value)
+
+
+@vault_app.command("write")
+def write_vault_field(
+    locker_name: Annotated[str, typer.Argument(help="Locker name.")],
+    field_key: Annotated[str, typer.Argument(help="Field key.")],
+    value: Annotated[str, typer.Argument(help="Field value.")],
+    config_path: ConfigOption = None,
+) -> None:
+    """Write a field to a Core Vault locker."""
+    config = _load_config(config_path)
+    FileVaultManager(config).write_field(locker_name, field_key, value)
+    console.print(
+        f"[green]Updated[/green] {locker_name}.{field_key}"
+    )
 
 
 @app.command()
