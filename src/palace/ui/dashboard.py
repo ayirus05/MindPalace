@@ -5,15 +5,12 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import streamlit as st
 
 from palace.models.config import PalaceConfig
 from palace.vault.manager import FileVaultManager, VaultManager
-
-
-ValueKind = Literal["String", "Number", "Boolean"]
 
 
 def run_dashboard(config: PalaceConfig) -> None:
@@ -70,28 +67,38 @@ def _render_create_locker(manager: VaultManager) -> None:
     if not st.session_state.get("show_create_locker", False):
         return
 
-    with st.sidebar.form("create_locker_form"):
-        st.subheader("New locker")
-        locker_name = st.text_input("Locker name")
-        field_name = st.text_input("Initial field")
-        value_kind = st.selectbox(
-            "Value type",
-            ("String", "Number", "Boolean"),
-            key="create_value_kind",
-        )
-        value = _new_value_widget(value_kind, key_prefix="create")
-        submitted = st.form_submit_button("Create Locker", use_container_width=True)
-
-    if not submitted:
-        return
-    try:
-        manager.write_field(locker_name, field_name, value)
-    except (TypeError, ValueError) as exc:
-        st.sidebar.error(str(exc))
-        return
-    st.session_state["show_create_locker"] = False
-    st.sidebar.success(f"Created {locker_name}")
-    st.rerun()
+    st.sidebar.divider()
+    st.sidebar.subheader("New locker setup")
+    
+    locker_name = st.sidebar.text_input("Locker name", key="create_name")
+    field_name = st.sidebar.text_input("Initial field", key="create_field")
+    
+    value_kind = st.sidebar.selectbox(
+        "Value type",
+        ("String", "Number", "Boolean"),
+        key="create_kind",
+    )
+    
+    # UI is now reactive! Changing the dropdown instantly swaps the widget.
+    if value_kind == "Boolean":
+        value = st.sidebar.checkbox("Value", key="create_val_bool")
+    elif value_kind == "Number":
+        # Passing an integer 0 rather than 0.0 forces integer inputs
+        value = st.sidebar.number_input("Value", value=0, step=1, key="create_val_num")
+    else:
+        value = st.sidebar.text_input("Value", key="create_val_str")
+        
+    if st.sidebar.button("Save Locker", type="primary", use_container_width=True):
+        if locker_name and field_name:
+            try:
+                manager.write_field(locker_name, field_name, value)
+                st.session_state["show_create_locker"] = False
+                st.sidebar.success(f"Created {locker_name}")
+                st.rerun()
+            except (TypeError, ValueError) as exc:
+                st.sidebar.error(str(exc))
+        else:
+            st.sidebar.error("Name and field are required.")
 
 
 def _render_locker_editor(
@@ -108,9 +115,12 @@ def _render_locker_editor(
 
     edited_values: dict[str, Any] = {}
     complex_values: dict[str, str] = {}
-    with st.form(f"edit_locker_{locker_name}"):
+    
+    # Replaced st.form with st.container to allow instant UI updates
+    with st.container():
         for index, (field, value) in enumerate(fields.items()):
-            widget_key = f"{locker_name}_{index}_{field}"
+            widget_key = f"edit_{locker_name}_{index}_{field}"
+            
             if isinstance(value, bool):
                 edited_values[field] = st.checkbox(field, value=value, key=widget_key)
             elif isinstance(value, int):
@@ -131,40 +141,40 @@ def _render_locker_editor(
                 )
 
         st.divider()
-        st.markdown("Add a field")
-        new_field = st.text_input("Field name", key=f"new_field_{locker_name}")
-        new_kind = st.selectbox(
-            "Field type",
-            ("String", "Number", "Boolean"),
-            key=f"new_kind_{locker_name}",
-        )
-        new_value = _new_value_widget(new_kind, key_prefix=f"new_{locker_name}")
-        submitted = st.form_submit_button("Save Changes", type="primary")
+        st.markdown("##### Add a new field")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            new_field = st.text_input("Field name", key=f"new_field_{locker_name}")
+        with col2:
+            new_kind = st.selectbox(
+                "Field type",
+                ("String", "Number", "Boolean"),
+                key=f"new_kind_{locker_name}",
+            )
+            
+        if new_kind == "Boolean":
+            new_value = st.checkbox("Value", key=f"new_val_bool_{locker_name}")
+        elif new_kind == "Number":
+            new_value = st.number_input("Value", value=0, step=1, key=f"new_val_num_{locker_name}")
+        else:
+            new_value = st.text_input("Value", key=f"new_val_str_{locker_name}")
 
-    if not submitted:
-        return
-
-    try:
-        for field, raw_json in complex_values.items():
-            edited_values[field] = json.loads(raw_json)
-        if new_field:
-            edited_values[new_field] = new_value
-        for field, value in edited_values.items():
-            manager.write_field(locker_name, field, value)
-    except (TypeError, ValueError, json.JSONDecodeError) as exc:
-        st.error(f"Changes were not saved: {exc}")
-        return
-
-    st.success("Changes saved.")
-    st.rerun()
-
-
-def _new_value_widget(value_kind: str, key_prefix: str) -> str | float | bool:
-    if value_kind == "Boolean":
-        return st.checkbox("Value", key=f"{key_prefix}_boolean")
-    if value_kind == "Number":
-        return st.number_input("Value", value=0.0, key=f"{key_prefix}_number")
-    return st.text_input("Value", key=f"{key_prefix}_string")
+        st.write("") 
+        if st.button("Save Changes", type="primary"):
+            try:
+                for field, raw_json in complex_values.items():
+                    edited_values[field] = json.loads(raw_json)
+                if new_field:
+                    edited_values[new_field] = new_value
+                
+                for field, value in edited_values.items():
+                    manager.write_field(locker_name, field, value)
+                    
+                st.success("Changes saved successfully!")
+                st.rerun()
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                st.error(f"Changes were not saved: {exc}")
 
 
 def _load_locker(config: PalaceConfig, locker_name: str) -> dict[str, Any]:
