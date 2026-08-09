@@ -2,93 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 import ollama
 
-from palace.skills.memory_tools import (
-    get_core_fact,
-    search_archival_memory,
-    update_core_fact,
-)
-
-
-MEMORY_TOOL_SCHEMAS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_core_fact",
-            "description": "Read an exact field from a Core Vault locker.",
-            "parameters": {
-                "type": "object",
-                "required": ["locker_name", "field"],
-                "properties": {
-                    "locker_name": {
-                        "type": "string",
-                        "description": "Name of the Core Vault locker.",
-                    },
-                    "field": {
-                        "type": "string",
-                        "description": "Exact field key to read.",
-                    },
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "update_core_fact",
-            "description": "Create or update an exact Core Vault field.",
-            "parameters": {
-                "type": "object",
-                "required": ["locker_name", "field", "value"],
-                "properties": {
-                    "locker_name": {
-                        "type": "string",
-                        "description": "Name of the Core Vault locker.",
-                    },
-                    "field": {
-                        "type": "string",
-                        "description": "Exact field key to create or update.",
-                    },
-                    "value": {
-                        "description": "JSON-compatible value to store.",
-                    },
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_archival_memory",
-            "description": "Semantically search archival MindPalace memory.",
-            "parameters": {
-                "type": "object",
-                "required": ["query"],
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Natural-language memory search query.",
-                    },
-                    "domain": {
-                        "type": "string",
-                        "description": "Optional memory domain filter.",
-                    },
-                },
-            },
-        },
-    },
-]
-
-
-MEMORY_TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
-    "get_core_fact": get_core_fact,
-    "update_core_fact": update_core_fact,
-    "search_archival_memory": search_archival_memory,
-}
+from palace.skills.loader import SkillRegistry, SkillSpec
 
 
 class MemoryAgent:
@@ -100,12 +18,47 @@ class MemoryAgent:
         self,
         model: str = "llama3.1",
         system_prompt: str | None = None,
+        registry: SkillRegistry | None = None,
+        active_skill: str | None = None,
     ) -> None:
         self.model = model
+        self.registry = registry if registry is not None else SkillRegistry()
+        self.active_skill: SkillSpec | None = None
         self.messages: list[Any] = []
         self.history = self.messages
+        self._skill_message: dict[str, str] | None = None
         if system_prompt:
             self.history.append({"role": "system", "content": system_prompt})
+        if active_skill is not None:
+            self.set_active_skill(active_skill)
+
+    def set_active_skill(self, skill_name: str | None) -> None:
+        """Activate a loaded skill, or clear the current skill with ``None``."""
+        if skill_name is None:
+            self.active_skill = None
+            self._remove_skill_message()
+            return
+
+        skill = self.registry.get_skill(skill_name)
+        if skill is None:
+            raise ValueError(f"Unknown skill: {skill_name}")
+
+        self.active_skill = skill
+        prompt = self.registry.get_skill_prompt(skill_name)
+        if self._skill_message is None:
+            self._skill_message = {"role": "system", "content": prompt}
+            self.history.append(self._skill_message)
+        else:
+            self._skill_message["content"] = prompt
+
+    def _remove_skill_message(self) -> None:
+        """Remove the active skill prompt from conversation history."""
+        if self._skill_message is None:
+            return
+        self.history[:] = [
+            message for message in self.history if message is not self._skill_message
+        ]
+        self._skill_message = None
 
     def chat(self, user_message: str) -> str:
         """Respond to a user message, executing any requested memory tools."""
@@ -113,7 +66,7 @@ class MemoryAgent:
         response = ollama.chat(
             model=self.model,
             messages=self.history,
-            tools=MEMORY_TOOL_SCHEMAS,
+            tools=self.registry.get_schemas(),
         )
         assistant_message = response.message
         self.history.append(assistant_message)
@@ -122,11 +75,15 @@ class MemoryAgent:
         while assistant_message.tool_calls and iteration_count < self.max_iterations:
             for tool_call in assistant_message.tool_calls:
                 function = tool_call.function
-                tool = MEMORY_TOOL_FUNCTIONS.get(function.name)
-                if tool is None:
-                    raise ValueError(f"Unknown memory tool: {function.name}")
-
-                result = tool(**dict(function.arguments))
+                arguments = dict(function.arguments)
+                policy_error = self._policy_error(function.name, arguments)
+                if policy_error:
+                    result = policy_error
+                else:
+                    tool = self.registry.get_function(function.name)
+                    if tool is None:
+                        raise ValueError(f"Unknown memory tool: {function.name}")
+                    result = tool(**arguments)
                 self.history.append(
                     {
                         "role": "tool",
@@ -138,7 +95,7 @@ class MemoryAgent:
             response = ollama.chat(
                 model=self.model,
                 messages=self.history,
-                tools=MEMORY_TOOL_SCHEMAS,
+                tools=self.registry.get_schemas(),
             )
             assistant_message = response.message
             self.history.append(assistant_message)
@@ -163,5 +120,23 @@ class MemoryAgent:
 
         return assistant_message.content or ""
 
+    def _policy_error(self, tool_name: str, arguments: dict[str, Any]) -> str | None:
+        """Reject tool calls that exceed the active skill's permissions."""
+        if self.active_skill is None:
+            return None
+        if tool_name not in self.active_skill.allowed_tools:
+            return (
+                f"Security Exception: Tool '{tool_name}' is not permitted by "
+                "the active skill policy."
+            )
 
-__all__ = ["MEMORY_TOOL_SCHEMAS", "MEMORY_TOOL_FUNCTIONS", "MemoryAgent"]
+        locker = arguments.get("locker_name")
+        if locker is not None and locker not in self.active_skill.allowed_lockers:
+            return (
+                f"Security Exception: Access to locker '{locker}' is not permitted "
+                "by the active skill policy."
+            )
+        return None
+
+
+__all__ = ["MemoryAgent"]

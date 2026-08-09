@@ -26,6 +26,9 @@ from palace.indexing.indexer import IncrementalIndexer
 from palace.indexing.repository import ChunkRepository, LanceDBRepository
 from palace.models.config import PalaceConfig
 from palace.search.engine import SemanticSearchEngine
+from palace.skills.loader import SkillRegistry
+from palace.skills.memory_tools import configure_memory_tools
+from palace.skills.router import MemoryAgent
 from palace.utils.logging import configure_logging
 from palace.vault.manager import FileVaultManager
 
@@ -151,6 +154,73 @@ def write_vault_field(
     console.print(
         f"[green]Updated[/green] {locker_name}.{field_key}"
     )
+
+
+@app.command()
+def chat(
+    config_path: ConfigOption = None,
+    skill_name: Annotated[
+        Optional[str],
+        typer.Option("--skill", "-s", help="Markdown skill to activate."),
+    ] = None,
+) -> None:
+    """Chat with the memory agent."""
+    cfg = _load_config(config_path)
+    embedder = _make_embedder(cfg)
+    repo = _make_repository(cfg)
+    vault = FileVaultManager(cfg)
+    search_engine = SemanticSearchEngine(cfg, embedder, repo)
+    configure_memory_tools(
+        vault_manager=vault,
+        search_engine=search_engine,
+    )
+    registry = SkillRegistry()
+    try:
+        agent = MemoryAgent(
+            model="llama3.1",
+            registry=registry,
+            active_skill=skill_name,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    console.print(
+        "[dim]Commands: /skills, /skill <name>, /skill off, exit[/dim]"
+    )
+
+    while True:
+        user_input = console.input("[bold green]You:[/bold green] ")
+        command = user_input.strip()
+        if command.lower() in {"exit", "quit"}:
+            break
+        if command == "/skills":
+            names = sorted(registry.skills)
+            console.print(
+                "[cyan]Available skills:[/cyan] " + (", ".join(names) or "none")
+            )
+            continue
+        if command == "/skill":
+            active = agent.active_skill.name if agent.active_skill else "none"
+            console.print(f"[cyan]Active skill:[/cyan] {active}")
+            continue
+        if command.startswith("/skill "):
+            requested_skill = command.removeprefix("/skill ").strip()
+            if requested_skill.lower() in {"off", "none"}:
+                agent.set_active_skill(None)
+                console.print("[yellow]Active skill cleared.[/yellow]")
+                continue
+            try:
+                agent.set_active_skill(requested_skill)
+            except ValueError as exc:
+                console.print(f"[red]{exc}[/red]")
+            else:
+                console.print(
+                    f"[green]Active skill:[/green] {requested_skill}"
+                )
+            continue
+        response = agent.chat(user_input)
+        console.print(f"[bold blue]Palace:[/bold blue] {response}")
 
 
 @app.command()
