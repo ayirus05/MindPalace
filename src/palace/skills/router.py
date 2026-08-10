@@ -19,46 +19,63 @@ class MemoryAgent:
         model: str = "llama3.1",
         system_prompt: str | None = None,
         registry: SkillRegistry | None = None,
-        active_skill: str | None = None,
+        active_skills: list[str] | None = None,
     ) -> None:
         self.model = model
         self.registry = registry if registry is not None else SkillRegistry()
-        self.active_skill: SkillSpec | None = None
+        self.active_skills: list[SkillSpec] = []
         self.messages: list[Any] = []
         self.history = self.messages
-        self._skill_message: dict[str, str] | None = None
+        self._skill_messages: list[dict[str, str]] = []
         if system_prompt:
             self.history.append({"role": "system", "content": system_prompt})
-        if active_skill is not None:
-            self.set_active_skill(active_skill)
+        if active_skills:
+            self.active_skills.extend(self._resolve_skills(active_skills))
+            self._append_skill_prompts()
 
-    def set_active_skill(self, skill_name: str | None) -> None:
-        """Activate a loaded skill, or clear the current skill with ``None``."""
-        if skill_name is None:
-            self.active_skill = None
-            self._remove_skill_message()
-            return
+    def set_active_skills(self, skill_names: list[str] | None) -> None:
+        """Replace the active skills and notify the model of the policy change."""
+        skills = self._resolve_skills(skill_names or [])
+        self._remove_skill_prompts()
+        self.active_skills = skills
 
-        skill = self.registry.get_skill(skill_name)
-        if skill is None:
-            raise ValueError(f"Unknown skill: {skill_name}")
+        names = ", ".join(skill.name for skill in skills) or "none"
+        self.history.append(
+            {
+                "role": "system",
+                "content": f"System: Active skills changed. Current active skills: {names}.",
+            }
+        )
+        self._append_skill_prompts()
 
-        self.active_skill = skill
-        prompt = self.registry.get_skill_prompt(skill_name)
-        if self._skill_message is None:
-            self._skill_message = {"role": "system", "content": prompt}
-            self.history.append(self._skill_message)
-        else:
-            self._skill_message["content"] = prompt
+    def _resolve_skills(self, skill_names: list[str]) -> list[SkillSpec]:
+        """Resolve all skill names before changing the active policy."""
+        skills: list[SkillSpec] = []
+        for skill_name in skill_names:
+            skill = self.registry.get_skill(skill_name)
+            if skill is None:
+                raise ValueError(f"Unknown skill: {skill_name}")
+            skills.append(skill)
+        return skills
 
-    def _remove_skill_message(self) -> None:
-        """Remove the active skill prompt from conversation history."""
-        if self._skill_message is None:
-            return
+    def _append_skill_prompts(self) -> None:
+        """Append each active skill's prompt as a separate system message."""
+        for skill in self.active_skills:
+            message = {
+                "role": "system",
+                "content": self.registry.get_skill_prompt(skill.name),
+            }
+            self._skill_messages.append(message)
+            self.history.append(message)
+
+    def _remove_skill_prompts(self) -> None:
+        """Remove prompts belonging to the previously active skills."""
         self.history[:] = [
-            message for message in self.history if message is not self._skill_message
+            message
+            for message in self.history
+            if all(message is not skill_message for skill_message in self._skill_messages)
         ]
-        self._skill_message = None
+        self._skill_messages.clear()
 
     def chat(self, user_message: str) -> str:
         """Respond to a user message, executing any requested memory tools."""
@@ -122,16 +139,27 @@ class MemoryAgent:
 
     def _policy_error(self, tool_name: str, arguments: dict[str, Any]) -> str | None:
         """Reject tool calls that exceed the active skill's permissions."""
-        if self.active_skill is None:
+        if not self.active_skills:
             return None
-        if tool_name not in self.active_skill.allowed_tools:
+
+        allowed_tools = {
+            tool
+            for skill in self.active_skills
+            for tool in skill.allowed_tools
+        }
+        if tool_name not in allowed_tools:
             return (
                 f"Security Exception: Tool '{tool_name}' is not permitted by "
                 "the active skill policy."
             )
 
         locker = arguments.get("locker_name")
-        if locker is not None and locker not in self.active_skill.allowed_lockers:
+        allowed_lockers = {
+            locker_name
+            for skill in self.active_skills
+            for locker_name in skill.allowed_lockers
+        }
+        if locker is not None and locker not in allowed_lockers:
             return (
                 f"Security Exception: Access to locker '{locker}' is not permitted "
                 "by the active skill policy."

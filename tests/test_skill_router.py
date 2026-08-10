@@ -118,7 +118,7 @@ Only read approved facts.
         "palace.skills.router.ollama.chat", lambda **kwargs: next(responses)
     )
 
-    agent = MemoryAgent(registry=registry, active_skill="restricted")
+    agent = MemoryAgent(registry=registry, active_skills=["restricted"])
     assert agent.chat("Read my private email") == "Denied"
     assert executed is False
     assert agent.history[-2]["content"] == (
@@ -128,13 +128,17 @@ Only read approved facts.
     assert "Allowed vault lockers: public" in agent.history[0]["content"]
 
 
-def test_agent_can_change_and_clear_active_skill(tmp_path: Any) -> None:
-    for name, locker in (("public-skill", "public"), ("work-skill", "work")):
+def test_agent_unions_and_changes_active_skill_permissions(tmp_path: Any) -> None:
+    skill_policies = (
+        ("public-skill", "public", "get_core_fact"),
+        ("work-skill", "work", "update_core_fact"),
+    )
+    for name, locker, tool in skill_policies:
         (tmp_path / f"{name}.md").write_text(
             f"""---
 name: {name}
 description: Access {locker} data.
-allowed_tools: [get_core_fact]
+allowed_tools: [{tool}]
 allowed_lockers: [{locker}]
 ---
 Use only the {locker} locker.
@@ -144,16 +148,27 @@ Use only the {locker} locker.
 
     agent = MemoryAgent(
         registry=SkillRegistry(skills_dir=tmp_path),
-        active_skill="public-skill",
+        active_skills=["public-skill", "work-skill"],
     )
-    assert agent.active_skill is not None
-    assert agent.active_skill.name == "public-skill"
-    assert agent._policy_error("get_core_fact", {"locker_name": "work"}) is not None
-
-    agent.set_active_skill("work-skill")
-    assert agent.active_skill is not None
-    assert agent.active_skill.name == "work-skill"
+    assert [skill.name for skill in agent.active_skills] == [
+        "public-skill",
+        "work-skill",
+    ]
     assert agent._policy_error("get_core_fact", {"locker_name": "work"}) is None
+    assert agent._policy_error("update_core_fact", {"locker_name": "public"}) is None
+    assert agent._policy_error("search_archival_memory", {}) is not None
+
+    initial_skill_messages = [
+        message
+        for message in agent.history
+        if isinstance(message, dict) and "Active skill:" in message.get("content", "")
+    ]
+    assert len(initial_skill_messages) == 2
+
+    agent.set_active_skills(["work-skill"])
+    assert [skill.name for skill in agent.active_skills] == ["work-skill"]
+    assert agent._policy_error("get_core_fact", {"locker_name": "work"}) is not None
+    assert agent._policy_error("update_core_fact", {"locker_name": "work"}) is None
     skill_messages = [
         message
         for message in agent.history
@@ -161,7 +176,9 @@ Use only the {locker} locker.
     ]
     assert len(skill_messages) == 1
     assert "Active skill: work-skill" in skill_messages[0]["content"]
+    assert "Current active skills: work-skill" in agent.history[-2]["content"]
 
-    agent.set_active_skill(None)
-    assert agent.active_skill is None
+    agent.set_active_skills(None)
+    assert agent.active_skills == []
+    assert agent._policy_error("get_core_fact", {"locker_name": "private"}) is None
     assert skill_messages[0] not in agent.history

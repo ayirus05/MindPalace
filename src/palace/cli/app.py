@@ -159,9 +159,13 @@ def write_vault_field(
 @app.command()
 def chat(
     config_path: ConfigOption = None,
-    skill_name: Annotated[
-        Optional[str],
-        typer.Option("--skill", "-s", help="Markdown skill to activate."),
+    skill_names: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--skill",
+            "-s",
+            help="Markdown skill to activate; repeat for multiple skills.",
+        ),
     ] = None,
 ) -> None:
     """Chat with the memory agent."""
@@ -179,14 +183,14 @@ def chat(
         agent = MemoryAgent(
             model="llama3.1",
             registry=registry,
-            active_skill=skill_name,
+            active_skills=skill_names,
         )
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
 
     console.print(
-        "[dim]Commands: /skills, /skill <name>, /skill off, exit[/dim]"
+        "[dim]Commands: /skills, /skill <name[,name...]>, /skill off, exit[/dim]"
     )
 
     while True:
@@ -201,22 +205,25 @@ def chat(
             )
             continue
         if command == "/skill":
-            active = agent.active_skill.name if agent.active_skill else "none"
-            console.print(f"[cyan]Active skill:[/cyan] {active}")
+            active = ", ".join(skill.name for skill in agent.active_skills) or "none"
+            console.print(f"[cyan]Active skills:[/cyan] {active}")
             continue
         if command.startswith("/skill "):
             requested_skill = command.removeprefix("/skill ").strip()
             if requested_skill.lower() in {"off", "none"}:
-                agent.set_active_skill(None)
-                console.print("[yellow]Active skill cleared.[/yellow]")
+                agent.set_active_skills(None)
+                console.print("[yellow]Active skills cleared.[/yellow]")
                 continue
+            requested_skills = [
+                name.strip() for name in requested_skill.split(",") if name.strip()
+            ]
             try:
-                agent.set_active_skill(requested_skill)
+                agent.set_active_skills(requested_skills)
             except ValueError as exc:
                 console.print(f"[red]{exc}[/red]")
             else:
                 console.print(
-                    f"[green]Active skill:[/green] {requested_skill}"
+                    f"[green]Active skills:[/green] {', '.join(requested_skills)}"
                 )
             continue
         response = agent.chat(user_input)
