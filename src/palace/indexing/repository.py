@@ -90,9 +90,7 @@ class LanceDBRepository:
     subsequent opens reuse it.  All public methods are safe to call
     repeatedly.
     """
-    VECTOR_DIM = 768
-
-    SCHEMA = pa.schema([
+    BASE_SCHEMA_FIELDS = [
         pa.field("chunk_id", pa.string()),
         pa.field("source_file", pa.string()),
         pa.field("source_file_hash", pa.string()),
@@ -105,8 +103,16 @@ class LanceDBRepository:
         pa.field("created_at", pa.string()),
         pa.field("updated_at", pa.string()),
         pa.field("content", pa.string()),
-        pa.field("vector", pa.list_(pa.float32(), VECTOR_DIM)),
-    ])
+    ]
+
+    VECTOR_FIELD_NAME = "vector"
+
+    @classmethod
+    def schema_for_dim(cls, dim: int) -> pa.Schema:
+        return pa.schema([
+            *cls.BASE_SCHEMA_FIELDS,
+            pa.field(cls.VECTOR_FIELD_NAME, pa.list_(pa.float32(), dim)),
+        ])
 
     def __init__(self, db_path: str | Path, table_name: str = "chunks") -> None:
         import lancedb  # imported here so tests can monkeypatch
@@ -118,20 +124,21 @@ class LanceDBRepository:
 
     # -- table lifecycle --
 
-    def _ensure_table(self) -> None:
+    def _ensure_table(self, vector_dim: int | None = None) -> None:
         """Open or create the LanceDB table."""
         if self._table is not None:
             return
-        existing = self._db.table_names()
+        existing = self._db.list_tables()
         if self._table_name in existing:
             self._table = self._db.open_table(self._table_name)
-        else:
-            # Create empty table with the declared schema.
-            self._table = self._db.create_table(
-                self._table_name,
-                schema=self.SCHEMA,
-                mode="create",
-            )
+            return
+        if vector_dim is None:
+            raise ValueError("Cannot create LanceDB table without vector dimensionality")
+        self._table = self._db.create_table(
+            self._table_name,
+            schema=self.schema_for_dim(vector_dim),
+            mode="create",
+        )
         logger.debug("LanceDB table '%s' ready", self._table_name)
 
     def _row_to_dict(self, row: dict[str, Any]) -> dict[str, Any]:
@@ -168,17 +175,24 @@ class LanceDBRepository:
         """Append chunks to the table.  Embeddings must be populated."""
         if not chunks:
             return 0
-        self._ensure_table()
         rows = [self._chunk_to_row(c) for c in chunks]
         missing = [r["chunk_id"] for r in rows if not r["vector"]]
         if missing:
             raise ValueError(f"Cannot insert chunks without embeddings: {missing[:3]}")
+        dims = [len(r["vector"]) for r in rows]
+        if any(d == 0 for d in dims):
+            raise ValueError("Cannot insert chunks with empty embedding vectors")
+        if len(set(dims)) != 1:
+            raise ValueError("All chunk embeddings must have the same dimensionality")
+        self._ensure_table(vector_dim=dims[0])
         self._table.add(rows)
         logger.info("Inserted %d chunks", len(rows))
         return len(rows)
 
     def delete_chunks(self, source_file: str) -> int:
         """Delete all chunks matching ``source_file``."""
+        if self._table is None and self._table_name not in self._db.list_tables():
+            return 0
         self._ensure_table()
         before = self._table.count_rows()
         # Escape single quotes to avoid breaking the SQL filter.
@@ -192,7 +206,6 @@ class LanceDBRepository:
     def update_chunks(self, source_file: str, chunks: list[Chunk]) -> int:
         """Replace all chunks for ``source_file`` with ``chunks``."""
         self.delete_chunks(source_file)
-        print("Sample chunk embedding length:", len(chunks[0].embedding if chunks else 0))
         return self.insert_chunks(chunks)
 
     # -- reads --
@@ -211,6 +224,8 @@ class LanceDBRepository:
         LanceDB's filter pushdown narrows the candidate set before the vector
         comparison, keeping the search fast over large tables.
         """
+        if self._table is None and self._table_name not in self._db.list_tables():
+            return []
         self._ensure_table()
         filter_sql = self._build_filter_sql(domain, date_from, date_to, tags)
         query = self._table.search(query_vector, vector_column_name="vector")
@@ -243,11 +258,9 @@ class LanceDBRepository:
         return " AND ".join(clauses)
 
     def filter_by_metadata(self, **filters: Any) -> list[dict[str, Any]]:
-        """Return rows matching all given metadata filters (non-vector).
-
-        Pushes the filter to LanceDB via a SQL WHERE clause on ``to_arrow``
-        rather than loading the entire table into Python memory.
-        """
+        """Return rows matching all given metadata filters (non-vector)."""
+        if self._table is None and self._table_name not in self._db.list_tables():
+            return []
         self._ensure_table()
         clauses: list[str] = []
         for key, value in filters.items():
@@ -261,15 +274,26 @@ class LanceDBRepository:
                 sub = [f"{key} = '{_escape_sql_string(str(v))}'" for v in value]
                 clauses.append("(" + " OR ".join(sub) + ")")
         if not clauses:
-            # No filters: return all rows (useful for `palace inspect` with no args).
             return [self._row_to_dict(r) for r in self._table.to_arrow().to_pylist()]
         where = " AND ".join(clauses)
-        # `to_arrow` accepts a `where` parameter for non-vector SQL filtering.
-        table = self._table.to_arrow(where=where)
-        return [self._row_to_dict(r) for r in table.to_pylist()]
+        rows = [self._row_to_dict(r) for r in self._table.to_arrow().to_pylist()]
+        def match_row(row: dict[str, Any]) -> bool:
+            for key, value in filters.items():
+                if value is None:
+                    continue
+                if isinstance(value, list):
+                    if row.get(key) not in value:
+                        return False
+                else:
+                    if row.get(key) != value and (not isinstance(value, DocumentDomain) or row.get(key) != value.value):
+                        return False
+            return True
+        return [row for row in rows if match_row(row)]
 
     def vacuum(self) -> dict[str, Any]:
         """Compact the table and reclaim space.  Returns metrics."""
+        if self._table is None and self._table_name not in self._db.list_tables():
+            return {"action": "skipped", "rows_before": 0, "rows_after": 0}
         self._ensure_table()
         before = self._table.count_rows()
         try:
@@ -283,6 +307,17 @@ class LanceDBRepository:
 
     def statistics(self) -> dict[str, Any]:
         """Return aggregate stats about the indexed corpus."""
+        if self._table is None and self._table_name not in self._db.list_tables():
+            return {
+                "total_chunks": 0,
+                "unique_source_files": 0,
+                "by_domain": {},
+                "by_extension": {},
+                "date_range_earliest": None,
+                "date_range_latest": None,
+                "db_path": self._db_path,
+                "last_indexed_at": datetime.utcnow().isoformat(),
+            }
         self._ensure_table()
         rows = self._table.to_arrow().to_pylist()
         total = len(rows)
@@ -313,6 +348,8 @@ class LanceDBRepository:
         }
 
     def count(self) -> int:
+        if self._table is None and self._table_name not in self._db.list_tables():
+            return 0
         self._ensure_table()
         return self._table.count_rows()
 

@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from palace.metadata.extractor import MetadataExtractor
+from palace.metadata.extractor import MetadataExtractor, extract_date
 from palace.models.chunk import Chunk, ChunkMetadata, DocumentDomain
 from palace.models.config import ChunkerConfig
 from palace.utils.hashing import TextEstimator, sha256_text
@@ -107,22 +107,34 @@ class JournalChunker:
             # Strip front-matter-only preambles (handled in extractor tags).
             if header == "preamble" and body.startswith("---"):
                 continue
+            body = body.strip()
+            if not body:
+                continue
+            entry_date = extract_date(header)
             body_hash = sha256_text(body)
             target = self._config.target_tokens
             if self._estimator.token_estimate(body) <= target * 2:
-                chunks.append(self._build_chunk(source_path, body, source_hash))
+                chunks.append(self._build_chunk(source_path, body, source_hash, entry_date))
             else:
                 # Long entry: split into token-budgeted sub-chunks.
                 for segment in self._estimator.split_to_token_budget(body, target):
-                    chunks.append(self._build_chunk(source_path, segment, source_hash))
+                    chunks.append(self._build_chunk(source_path, segment, source_hash, entry_date))
         if not chunks:
             logger.debug("No chunks produced from %s", source_path)
         return chunks
 
-    def _build_chunk(self, source_path: Path, text: str, source_hash: str) -> Chunk:
+    def _build_chunk(
+        self,
+        source_path: Path,
+        text: str,
+        source_hash: str,
+        explicit_date: date | None = None,
+    ) -> Chunk:
         domain, d, tags, content_hash, wc, tok = self._extractor.build_metadata(
             source_path, text, source_hash
         )
+        if explicit_date is not None:
+            d = explicit_date
         metadata = ChunkMetadata(
             source_file=str(source_path),
             source_file_hash=source_hash,

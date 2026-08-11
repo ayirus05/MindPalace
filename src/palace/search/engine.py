@@ -190,12 +190,13 @@ def _row_to_hit(row: dict[str, Any]) -> RawHit:
         if isinstance(domain_value, DocumentDomain)
         else DocumentDomain.from_string(domain_value)
     )
-    # Score may be ``_distance`` (L2) or ``_similarity`` depending on metric.
+    # Score may be ``_similarity`` when the store exposes cosine similarity,
+    # or ``_distance`` for distance-based metrics. Convert distance to a
+    # positive proxy while preserving ordering.
     score = row.get("_similarity")
     if score is None:
-        # Convert L2 distance to a similarity proxy in [0, 1].
-        dist = row.get("_distance", 0.0)
-        score = max(0.0, 1.0 - dist)
+        dist = float(row.get("_distance", 0.0))
+        score = 1.0 / (1.0 + dist)
     return RawHit(
         chunk_id=row.get("chunk_id", ""),
         content=row.get("content", ""),
