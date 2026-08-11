@@ -48,9 +48,9 @@ class TestSearchRanker:
     def test_sorts_by_score(self) -> None:
         ranker = SearchRanker(SearchConfig(minimum_score=0.0))
         hits = [
-            _make_hit(chunk_id="c1", score=0.5),
-            _make_hit(chunk_id="c2", score=0.9),
-            _make_hit(chunk_id="c3", score=0.7),
+            _make_hit(chunk_id="c1", score=0.5, source_file="/a1.md"),
+            _make_hit(chunk_id="c2", score=0.9, source_file="/a2.md"),
+            _make_hit(chunk_id="c3", score=0.7, source_file="/a3.md"),
         ]
         results = ranker.rank(hits)
         assert [r.chunk_id for r in results] == ["c2", "c3", "c1"]
@@ -111,7 +111,10 @@ class TestSearchRanker:
     def test_top_k_limit(self) -> None:
         cfg = SearchConfig(minimum_score=0.0, default_top_k=2)
         ranker = SearchRanker(cfg)
-        hits = [_make_hit(chunk_id=f"c{i}", score=0.5 + i * 0.01) for i in range(5)]
+        hits = [
+            _make_hit(chunk_id=f"c{i}", score=0.5 + i * 0.01, source_file=f"/file{i}.md")
+            for i in range(5)
+        ]
         results = ranker.rank(hits)
         assert len(results) == 2
 

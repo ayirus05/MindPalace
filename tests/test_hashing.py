@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from palace.utils.hashing import TextEstimator, hash_file, sha256_bytes, sha256_text
 
 

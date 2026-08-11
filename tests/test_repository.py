@@ -23,6 +23,7 @@ def _make_chunk(
     d: date | None = None,
     tags: list[str] | None = None,
 ) -> Chunk:
+    word_count = len(content.split())
     md = ChunkMetadata(
         chunk_id=chunk_id,
         source_file=source_file,
@@ -31,8 +32,8 @@ def _make_chunk(
         date=d,
         tags=tags or [],
         content_hash="content_hash",
-        word_count=len(content.split()),
-        token_estimate=len(content.split()) * 1.3,
+        word_count=word_count,
+        token_estimate=int(round(word_count * 1.3)),
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )

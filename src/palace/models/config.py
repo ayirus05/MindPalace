@@ -20,7 +20,7 @@ class EmbeddingConfig(BaseModel):
     model: str = "nomic-embed-text"
     host: str = "http://localhost:11434"
     timeout_seconds: float = 60.0
-    batch_size: int = 32
+    batch_size: int = Field(default=32, ge=1)
     max_retries: int = 4
     retry_initial_wait_seconds: float = 1.0
     retry_max_wait_seconds: float = 30.0
