@@ -24,6 +24,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from palace.embeddings.manager import Embedder, FakeEmbedder, OllamaEmbedder
 from palace.indexing.indexer import IncrementalIndexer
 from palace.indexing.repository import ChunkRepository, LanceDBRepository
+from palace.llm.factory import get_llm_provider
 from palace.models.config import PalaceConfig
 from palace.search.engine import SemanticSearchEngine
 from palace.skills.loader import SkillRegistry
@@ -167,9 +168,25 @@ def chat(
             help="Markdown skill to activate; repeat for multiple skills.",
         ),
     ] = None,
+    provider_name: Annotated[
+        Optional[str],
+        typer.Option("--provider", help="LLM backend: ollama or gemini."),
+    ] = None,
+    model_name: Annotated[
+        Optional[str],
+        typer.Option("--model", help="Model name for the selected provider."),
+    ] = None,
 ) -> None:
     """Chat with the memory agent."""
     cfg = _load_config(config_path)
+    provider_type = (provider_name or cfg.llm.provider or "ollama").strip().lower()
+    provider_model = model_name or cfg.llm.model or "llama3.1"
+    provider = get_llm_provider(
+        provider_type,
+        provider_model,
+        api_key=cfg.llm.api_key or os.environ.get("GEMINI_API_KEY"),
+        host=cfg.llm.host,
+    )
     embedder = _make_embedder(cfg)
     repo = _make_repository(cfg)
     vault = FileVaultManager(cfg)
@@ -181,9 +198,10 @@ def chat(
     registry = SkillRegistry()
     try:
         agent = MemoryAgent(
-            model="llama3.1",
+            model=provider_model,
             registry=registry,
             active_skills=skill_names,
+            provider=provider,
         )
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")

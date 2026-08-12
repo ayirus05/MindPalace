@@ -1,4 +1,4 @@
-"""Ollama-powered conversational router for MindPalace memory tools."""
+"""Provider-backed conversational router for MindPalace memory tools."""
 
 from __future__ import annotations
 
@@ -6,11 +6,12 @@ from typing import Any
 
 import ollama
 
+from palace.llm.provider import BaseLLMProvider, OllamaProvider
 from palace.skills.loader import SkillRegistry, SkillSpec
 
 
 class MemoryAgent:
-    """Maintain a conversation and route Ollama tool calls to memory tools."""
+    """Maintain a conversation and route tool calls to memory tools."""
 
     max_iterations = 3
 
@@ -20,8 +21,10 @@ class MemoryAgent:
         system_prompt: str | None = None,
         registry: SkillRegistry | None = None,
         active_skills: list[str] | None = None,
+        provider: BaseLLMProvider | None = None,
     ) -> None:
         self.model = model
+        self.provider = provider or OllamaProvider(model_name=model)
         self.registry = registry if registry is not None else SkillRegistry()
         self.active_skills: list[SkillSpec] = []
         self.messages: list[Any] = []
@@ -80,42 +83,56 @@ class MemoryAgent:
     def chat(self, user_message: str) -> str:
         """Respond to a user message, executing any requested memory tools."""
         self.history.append({"role": "user", "content": user_message})
-        response = ollama.chat(
-            model=self.model,
+        response = self.provider.chat(
             messages=self.history,
             tools=self.registry.get_schemas(),
         )
-        assistant_message = response.message
-        self.history.append(assistant_message)
+        assistant_message = response
+        print(f"[MemoryAgent] level=0 response: {assistant_message.content!r}")
+        if assistant_message.tool_calls:
+            print(f"[MemoryAgent] level=0 tool_calls: {assistant_message.tool_calls!r}")
+        self.history.append({
+            "role": "assistant",
+            "content": assistant_message.content,
+            "tool_calls": assistant_message.tool_calls,
+        })
 
         iteration_count = 0
         while assistant_message.tool_calls and iteration_count < self.max_iterations:
             for tool_call in assistant_message.tool_calls:
-                function = tool_call.function
-                arguments = dict(function.arguments)
-                policy_error = self._policy_error(function.name, arguments)
+                function_name = tool_call.get("name")
+                if not function_name:
+                    continue
+                arguments = dict(tool_call.get("arguments") or {})
+                policy_error = self._policy_error(function_name, arguments)
                 if policy_error:
                     result = policy_error
                 else:
-                    tool = self.registry.get_function(function.name)
+                    tool = self.registry.get_function(function_name)
                     if tool is None:
-                        raise ValueError(f"Unknown memory tool: {function.name}")
+                        raise ValueError(f"Unknown memory tool: {function_name}")
                     result = tool(**arguments)
                 self.history.append(
                     {
                         "role": "tool",
-                        "tool_name": function.name,
+                        "tool_name": function_name,
                         "content": str(result),
                     }
                 )
 
-            response = ollama.chat(
-                model=self.model,
+            response = self.provider.chat(
                 messages=self.history,
                 tools=self.registry.get_schemas(),
             )
-            assistant_message = response.message
-            self.history.append(assistant_message)
+            assistant_message = response
+            print(f"[MemoryAgent] level={iteration_count + 1} response: {assistant_message.content!r}")
+            if assistant_message.tool_calls:
+                print(f"[MemoryAgent] level={iteration_count + 1} tool_calls: {assistant_message.tool_calls!r}")
+            self.history.append({
+                "role": "assistant",
+                "content": assistant_message.content,
+                "tool_calls": assistant_message.tool_calls,
+            })
             iteration_count += 1
 
         if assistant_message.tool_calls and iteration_count >= self.max_iterations:
@@ -128,12 +145,18 @@ class MemoryAgent:
                     ),
                 }
             )
-            response = ollama.chat(
-                model=self.model,
+            response = self.provider.chat(
                 messages=self.history,
             )
-            assistant_message = response.message
-            self.history.append(assistant_message)
+            assistant_message = response
+            print(f"[MemoryAgent] level=max_iterations response: {assistant_message.content!r}")
+            if assistant_message.tool_calls:
+                print(f"[MemoryAgent] level=max_iterations tool_calls: {assistant_message.tool_calls!r}")
+            self.history.append({
+                "role": "assistant",
+                "content": assistant_message.content,
+                "tool_calls": assistant_message.tool_calls,
+            })
 
         return assistant_message.content or ""
 

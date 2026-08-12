@@ -81,6 +81,15 @@ class LoggingConfig(BaseModel):
     file_path: str | None = "data/logs/palace.log"
 
 
+class LLMConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str = "ollama"
+    model: str = "llama3.1"
+    api_key: str | None = None
+    host: str = "http://localhost:11434"
+
+
 class PalaceConfig(BaseModel):
     """Top-level configuration.  ``project_root`` is resolved at load time."""
 
@@ -93,6 +102,7 @@ class PalaceConfig(BaseModel):
     search: SearchConfig = Field(default_factory=SearchConfig)
     vault: VaultConfig = Field(default_factory=VaultConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
     project_root: Path = Path(".")
 
     def resolve(self, path: str | Path) -> Path:

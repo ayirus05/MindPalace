@@ -69,6 +69,13 @@ vault:
   system_lockers_dir: "data/vault/system"
   user_lockers_dir: "data/vault/user"
 
+# --- LLM ---
+llm:
+  provider: "ollama"
+  model: "llama3.1"
+  api_key: null
+  host: "http://localhost:11434"
+
 # --- Logging ---
 logging:
   level: "INFO"
