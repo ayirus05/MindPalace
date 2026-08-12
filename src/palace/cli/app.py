@@ -194,8 +194,14 @@ def chat(
     )
 
     while True:
-        user_input = console.input("[bold green]You:[/bold green] ")
+        user_input = console.input("[bold green]You:[/bold green]\n")
         command = user_input.strip()
+
+        if not command.startswith("/"):
+            response = agent.chat(user_input)
+            console.print(f"[bold blue]Palace:[/bold blue] {response}")
+            continue
+
         if command.lower() in {"exit", "quit"}:
             break
         if command == "/skills":
@@ -226,8 +232,7 @@ def chat(
                     f"[green]Active skills:[/green] {', '.join(requested_skills)}"
                 )
             continue
-        response = agent.chat(user_input)
-        console.print(f"[bold blue]Palace:[/bold blue] {response}")
+        console.print("[yellow]Unknown command.[/yellow]")
 
 
 @app.command()
