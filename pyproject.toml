@@ -26,6 +26,7 @@ dependencies = [
     "fastapi>=0.110.0,<0.116.0",
     "streamlit>=1.32.0",
     "markdown-it-py>=3.0.0",
+    "yake>=0.4.8",
 ]
 
 [project.optional-dependencies]

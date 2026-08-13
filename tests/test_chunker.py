@@ -40,7 +40,10 @@ Run three times a week.
 
         chunks = MarkdownASTChunker().chunk_by_headers(markdown)
 
-        assert chunks == [
+        assert [
+            {key: value for key, value in chunk.items() if key != "keywords"}
+            for chunk in chunks
+        ] == [
             {
                 "context_path": "2026 Goals",
                 "text": "Plan for the year.",
@@ -69,6 +72,12 @@ Run three times a week.
                 ),
             },
         ]
+        assert all(chunk["keywords"] for chunk in chunks)
+        assert all(
+            isinstance(keyword, str)
+            for chunk in chunks
+            for keyword in chunk["keywords"]
+        )
 
 
 class TestSplitJournalEntries:

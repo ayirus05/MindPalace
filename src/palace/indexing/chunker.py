@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from markdown_it import MarkdownIt
+import yake
 
 from palace.metadata.extractor import MetadataExtractor, extract_date
 from palace.models.chunk import Chunk, ChunkMetadata, DocumentDomain
@@ -25,6 +26,16 @@ from palace.utils.hashing import TextEstimator, sha256_text
 
 
 logger = logging.getLogger("palace.chunker")
+
+_KEYWORD_EXTRACTOR = yake.KeywordExtractor(lan="en", n=2, dedupLim=0.9, top=5)
+
+
+def extract_keywords(embed_text: str) -> list[str]:
+    """Extract ranked keyword strings from text prepared for embedding."""
+    return [
+        keyword
+        for keyword, _score in _KEYWORD_EXTRACTOR.extract_keywords(embed_text)
+    ]
 
 
 class MarkdownASTChunker:
@@ -51,11 +62,13 @@ class MarkdownASTChunker:
             text = "".join(lines[section_start:end_line]).strip()
             if not text:
                 return
+            embed_text = f"Context: {context_path}\n\n{text}"
             chunks.append(
                 {
                     "context_path": context_path,
                     "text": text,
-                    "embed_text": f"Context: {context_path}\n\n{text}",
+                    "embed_text": embed_text,
+                    "keywords": extract_keywords(embed_text),
                 }
             )
 
@@ -333,6 +346,7 @@ __all__ = [
     "JournalChunker",
     "MarkdownASTChunker",
     "NoteChunker",
+    "extract_keywords",
     "make_chunker",
     "split_journal_entries",
     "sha256_file_safe",
