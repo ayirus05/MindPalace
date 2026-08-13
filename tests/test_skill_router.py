@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+from ollama import Message
+
 from palace.skills.loader import SkillRegistry
 from palace.skills.router import MemoryAgent
 
@@ -71,6 +73,12 @@ def test_agent_uses_injected_registry(monkeypatch: Any) -> None:
     assert registry.calls == [{"value": "blue"}]
     assert ollama_calls[0]["tools"] is registry.schemas
     assert ollama_calls[1]["tools"] is registry.schemas
+    assistant_history = next(
+        message
+        for message in ollama_calls[1]["messages"]
+        if message.get("role") == "assistant" and message.get("tool_calls")
+    )
+    Message.model_validate(assistant_history)
 
 
 def test_agent_blocks_disallowed_locker_and_reports_tool_error(

@@ -100,10 +100,19 @@ class MemoryAgent:
         iteration_count = 0
         while assistant_message.tool_calls and iteration_count < self.max_iterations:
             for tool_call in assistant_message.tool_calls:
-                function_name = tool_call.get("name")
+                if isinstance(tool_call, dict):
+                    fn_data = tool_call.get("function", tool_call)
+                    function_name = fn_data.get("name")
+                    arguments = dict(fn_data.get("arguments") or {})
+                else:
+                    fn_data = getattr(tool_call, "function", None) or tool_call
+                    function_name = getattr(fn_data, "name", None)
+                    raw_arguments = getattr(fn_data, "arguments", None)
+                    if raw_arguments is None:
+                        raw_arguments = getattr(fn_data, "args", None)
+                    arguments = dict(raw_arguments or {})
                 if not function_name:
                     continue
-                arguments = dict(tool_call.get("arguments") or {})
                 policy_error = self._policy_error(function_name, arguments)
                 if policy_error:
                     result = policy_error

@@ -48,27 +48,28 @@ class LLMResponse:
 
     @staticmethod
     def _coerce_tool_call(tool_call: Any) -> dict[str, Any]:
-        if hasattr(tool_call, "function"):
-            function = getattr(tool_call, "function")
-            name = getattr(function, "name", None)
-            arguments = getattr(function, "arguments", {}) or {}
-            return {"name": name, "arguments": dict(arguments)}
-
         if isinstance(tool_call, dict):
-            if "function" in tool_call:
-                function = tool_call.get("function") or {}
-                return {
-                    "name": function.get("name"),
-                    "arguments": dict(function.get("arguments", {}) or {}),
-                }
-            return {
-                "name": tool_call.get("name"),
-                "arguments": dict(tool_call.get("arguments", {}) or {}),
-            }
+            function = tool_call.get("function", tool_call)
+        else:
+            function = getattr(tool_call, "function", None) or tool_call
+
+        if isinstance(function, dict):
+            name = function.get("name")
+            arguments = function.get("arguments")
+            if arguments is None:
+                arguments = function.get("args")
+        else:
+            name = getattr(function, "name", None)
+            arguments = getattr(function, "arguments", None)
+            if arguments is None:
+                arguments = getattr(function, "args", None)
 
         return {
-            "name": getattr(tool_call, "name", None),
-            "arguments": dict(getattr(tool_call, "arguments", {}) or {}),
+            "type": "function",
+            "function": {
+                "name": name,
+                "arguments": dict(arguments or {}),
+            },
         }
 
     @classmethod
@@ -111,7 +112,23 @@ class OllamaProvider(BaseLLMProvider):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
-        payload: dict[str, Any] = {"model": self.model_name, "messages": messages}
+        sanitized_messages: list[dict[str, Any]] = []
+        for message in messages:
+            sanitized_message = dict(message)
+            if (
+                sanitized_message.get("role") == "assistant"
+                and sanitized_message.get("tool_calls")
+            ):
+                sanitized_message["tool_calls"] = [
+                    LLMResponse._coerce_tool_call(tool_call)
+                    for tool_call in sanitized_message["tool_calls"]
+                ]
+            sanitized_messages.append(sanitized_message)
+
+        payload: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": sanitized_messages,
+        }
         if tools:
             payload["tools"] = tools
         response = ollama.chat(**payload)
