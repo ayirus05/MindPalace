@@ -40,3 +40,4 @@ Thumbs.db
 data/**
 !data/**/
 !data/**/.gitkeep
+!data/skills/**
