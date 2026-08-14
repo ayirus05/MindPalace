@@ -8,6 +8,7 @@ import pytest
 
 from palace.indexing.chunker import (
     JournalChunker,
+    MarkdownASTChunker,
     NoteChunker,
     make_chunker,
     split_journal_entries,
@@ -15,6 +16,68 @@ from palace.indexing.chunker import (
 from palace.metadata.extractor import MetadataExtractor
 from palace.models.chunk import DocumentDomain
 from palace.models.config import ChunkerConfig
+
+
+class TestMarkdownASTChunker:
+    def test_chunks_by_header_hierarchy(self) -> None:
+        markdown = """# 2026 Goals
+
+Plan for the year.
+
+## Home Lab
+
+Build the new server.
+
+### Networking
+
+- Configure VLANs
+- Add firewall rules
+
+## Fitness
+
+Run three times a week.
+"""
+
+        chunks = MarkdownASTChunker().chunk_by_headers(markdown)
+
+        assert [
+            {key: value for key, value in chunk.items() if key != "keywords"}
+            for chunk in chunks
+        ] == [
+            {
+                "context_path": "2026 Goals",
+                "text": "Plan for the year.",
+                "embed_text": "Context: 2026 Goals\n\nPlan for the year.",
+            },
+            {
+                "context_path": "2026 Goals > Home Lab",
+                "text": "Build the new server.",
+                "embed_text": (
+                    "Context: 2026 Goals > Home Lab\n\nBuild the new server."
+                ),
+            },
+            {
+                "context_path": "2026 Goals > Home Lab > Networking",
+                "text": "- Configure VLANs\n- Add firewall rules",
+                "embed_text": (
+                    "Context: 2026 Goals > Home Lab > Networking\n\n"
+                    "- Configure VLANs\n- Add firewall rules"
+                ),
+            },
+            {
+                "context_path": "2026 Goals > Fitness",
+                "text": "Run three times a week.",
+                "embed_text": (
+                    "Context: 2026 Goals > Fitness\n\nRun three times a week."
+                ),
+            },
+        ]
+        assert all(chunk["keywords"] for chunk in chunks)
+        assert all(
+            isinstance(keyword, str)
+            for chunk in chunks
+            for keyword in chunk["keywords"]
+        )
 
 
 class TestSplitJournalEntries:

@@ -1,9 +1,11 @@
-"""Chunking strategies: journals split by dated entry, other notes by token budget.
+"""Chunking strategies for journals and Markdown notes.
 
 The :class:`Chunker` protocol keeps the indexer decoupled from the concrete
 splitting logic.  :class:`JournalChunker` recognises date markers and emits
 one chunk per dated entry; :class:`NoteChunker` uses a sliding word window
-to hit a target token count with configurable overlap.
+to hit a target token count with configurable overlap.  For callers that
+embed Markdown directly, :class:`MarkdownASTChunker` groups content by its
+active header hierarchy.
 """
 
 from __future__ import annotations
@@ -14,6 +16,9 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from markdown_it import MarkdownIt
+import yake
+
 from palace.metadata.extractor import MetadataExtractor, extract_date
 from palace.models.chunk import Chunk, ChunkMetadata, DocumentDomain
 from palace.models.config import ChunkerConfig
@@ -21,6 +26,90 @@ from palace.utils.hashing import TextEstimator, sha256_text
 
 
 logger = logging.getLogger("palace.chunker")
+
+_KEYWORD_EXTRACTOR = yake.KeywordExtractor(lan="en", n=2, dedupLim=0.9, top=5)
+
+
+def extract_keywords(embed_text: str) -> list[str]:
+    """Extract ranked keyword strings from text prepared for embedding."""
+    return [
+        keyword
+        for keyword, _score in _KEYWORD_EXTRACTOR.extract_keywords(embed_text)
+    ]
+
+
+class MarkdownASTChunker:
+    """Split Markdown into semantic sections based on heading hierarchy.
+
+    Heading text is carried in ``context_path`` rather than repeated in the
+    section body.  The body itself is sliced from the source so Markdown
+    formatting (including lists, links, and fenced code) remains intact.
+    """
+
+    def __init__(self) -> None:
+        self._markdown = MarkdownIt("commonmark")
+
+    def chunk_by_headers(self, markdown_text: str) -> list[dict]:
+        """Return one embedding payload for each non-empty Markdown section."""
+        tokens = self._markdown.parse(markdown_text)
+        lines = markdown_text.splitlines(keepends=True)
+        active_headers: dict[int, str] = {}
+        chunks: list[dict] = []
+        section_start = 0
+        context_path = ""
+
+        def append_section(end_line: int) -> None:
+            text = "".join(lines[section_start:end_line]).strip()
+            if not text:
+                return
+            embed_text = f"Context: {context_path}\n\n{text}"
+            chunks.append(
+                {
+                    "context_path": context_path,
+                    "text": text,
+                    "embed_text": embed_text,
+                    "keywords": extract_keywords(embed_text),
+                }
+            )
+
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+            if token.type != "heading_open":
+                index += 1
+                continue
+
+            # Block heading tokens always carry their source line range under
+            # CommonMark.  Guarding the map keeps the chunker safe if plugins
+            # introduce synthetic headings later.
+            if token.map is None:
+                index += 1
+                continue
+
+            append_section(token.map[0])
+
+            level = int(token.tag.removeprefix("h"))
+            for existing_level in list(active_headers):
+                if existing_level >= level:
+                    del active_headers[existing_level]
+
+            heading_text = ""
+            index += 1
+            while index < len(tokens) and tokens[index].type != "heading_close":
+                if tokens[index].type == "inline":
+                    heading_text = tokens[index].content.strip()
+                index += 1
+
+            active_headers[level] = heading_text
+            context_path = " > ".join(
+                active_headers[header_level]
+                for header_level in sorted(active_headers)
+            )
+            section_start = token.map[1]
+            index += 1
+
+        append_section(len(lines))
+        return chunks
 
 
 @runtime_checkable
@@ -255,7 +344,9 @@ def make_chunker(
 __all__ = [
     "Chunker",
     "JournalChunker",
+    "MarkdownASTChunker",
     "NoteChunker",
+    "extract_keywords",
     "make_chunker",
     "split_journal_entries",
     "sha256_file_safe",
