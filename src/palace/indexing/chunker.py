@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol, runtime_checkable
 
 from markdown_it import MarkdownIt
 
-from palace.metadata.keywords import extract_keywords
 from palace.metadata.extractor import MetadataExtractor
+from palace.metadata.keywords import extract_keywords
 from palace.models.chunk import Chunk, ChunkMetadata
 from palace.models.config import ChunkerConfig
 
@@ -40,7 +38,11 @@ class MarkdownASTChunker:
 
     def chunk_text(self, text: str, source_path: Path) -> list[Chunk]:
         """Convert heading-delimited sections into validated chunks."""
-        source_hash = self._source_hash_override or sha256_file_safe(source_path, text)
+        source_hash = (
+            self._source_hash_override
+            if self._source_hash_override is not None
+            else sha256_file_safe(source_path, text)
+        )
         chunks: list[Chunk] = []
         for section in self.chunk_by_headers(text):
             section_text = section["text"]
@@ -135,58 +137,6 @@ class MarkdownASTChunker:
         return chunks
 
 
-@runtime_checkable
-class Chunker(Protocol):
-    """Chunk a single source file into :class:`Chunk` instances."""
-
-    def chunk_file(self, path: Path) -> list[Chunk]:
-        ...
-
-    def chunk_text(self, text: str, source_path: Path) -> list[Chunk]:
-        ...
-
-
-# ---- Journal entry splitter ------------------------------------------------
-
-# A journal entry is assumed to begin with a date line.  We accept ISO dates
-# (``2026-04-15``), long-form (``April 15, 2026``), and slash dates.  An entry
-# runs until the next recognised date header or EOF.
-_DATE_HEADER_RE = re.compile(
-    r"^(?:(\d{4}-\d{2}-\d{2})"                                   # ISO
-    r"|((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})"
-    r"|(\d{1,2}/\d{1,2}/\d{4}))\s*$",
-    re.IGNORECASE | re.MULTILINE,
-)
-
-
-def split_journal_entries(text: str) -> list[tuple[str, str]]:
-    """Split a journal file into ``(header, body)`` tuples.
-
-    Returns one tuple per dated entry.  Leading content before the first
-    dated header (e.g. a YAML front-matter block) is attached as preamble
-    to the first entry, or returned as a single front-matter-only entry.
-    """
-    matches = list(_DATE_HEADER_RE.finditer(text))
-    if not matches:
-        return [("", text)]
-
-    entries: list[tuple[str, str]] = []
-    # Preamble before the first header: keep as a separate chunk if substantial.
-    preamble = text[: matches[0].start()].strip()
-    if preamble:
-        entries.append(("preamble", preamble))
-
-    for i, m in enumerate(matches):
-        head = m.group(0).strip()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        body = text[m.end():end].strip()
-        if body:
-            entries.append((head, body))
-    return entries
-
-
-# ---- Factory --------------------------------------------------------------
-
 def sha256_file_safe(path: Path, text: str) -> str:
     """Hash a file's bytes; fall back to hashing the in-memory text."""
     from palace.utils.hashing import hash_file, sha256_text
@@ -197,21 +147,8 @@ def sha256_file_safe(path: Path, text: str) -> str:
         return sha256_text(text)
 
 
-def make_chunker(
-    source_path: Path,
-    config: ChunkerConfig,
-    extractor: MetadataExtractor,
-    source_hash: str | None = None,
-) -> Chunker:
-    """Build the semantic Markdown chunker used for every document domain."""
-    return MarkdownASTChunker(config, extractor, source_hash_override=source_hash)
-
-
 __all__ = [
-    "Chunker",
     "MarkdownASTChunker",
     "extract_keywords",
-    "make_chunker",
-    "split_journal_entries",
     "sha256_file_safe",
 ]

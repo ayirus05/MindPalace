@@ -88,7 +88,7 @@ MindPalace/
 │   ├── metadata/
 │   │   └── extractor.py     # date/domain/tag extraction strategies
 │   ├── indexing/
-│   │   ├── chunker.py       # JournalChunker + NoteChunker + factory
+│   │   ├── chunker.py       # MarkdownASTChunker
 │   │   ├── hash_cache.py    # JSON-backed incremental cache
 │   │   ├── indexer.py       # IncrementalIndexer (delta pipeline)
 │   │   └── repository.py    # LanceDBRepository (the only DB layer)

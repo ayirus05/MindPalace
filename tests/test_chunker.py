@@ -4,12 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from palace.indexing.chunker import (
-    Chunker,
-    MarkdownASTChunker,
-    make_chunker,
-    split_journal_entries,
-)
+from palace.indexing.chunker import MarkdownASTChunker
 from palace.metadata.extractor import MetadataExtractor
 from palace.models.chunk import DocumentDomain
 from palace.models.config import ChunkerConfig
@@ -17,7 +12,7 @@ from palace.models.config import ChunkerConfig
 
 class TestMarkdownASTChunker:
     @staticmethod
-    def make_chunker(source_hash: str | None = None) -> MarkdownASTChunker:
+    def build_chunker(source_hash: str | None = None) -> MarkdownASTChunker:
         config = ChunkerConfig()
         return MarkdownASTChunker(
             config,
@@ -44,7 +39,7 @@ Build the new server.
 Run three times a week.
 """
 
-        chunks = self.make_chunker().chunk_by_headers(markdown)
+        chunks = self.build_chunker().chunk_by_headers(markdown)
 
         assert [
             {key: value for key, value in chunk.items() if key != "keywords"}
@@ -101,7 +96,7 @@ Tailscale runs inside this container.
 Tailscale connects remote hosts.
 """
 
-        chunks = self.make_chunker().chunk_by_headers(markdown)
+        chunks = self.build_chunker().chunk_by_headers(markdown)
 
         assert len(chunks) == 4
         assert [chunk["context_path"] for chunk in chunks] == [
@@ -119,12 +114,9 @@ Tailscale connects remote hosts.
         assert "proxmox" in proxmox_keywords
         assert "tailscale" in tailscale_keywords
 
-    def test_implements_chunker_protocol(self) -> None:
-        assert isinstance(self.make_chunker(), Chunker)
-
     def test_chunk_text_builds_validated_chunks_with_keywords(self) -> None:
         source_path = Path("notes/project.md")
-        chunks = self.make_chunker("fixedhash").chunk_text(
+        chunks = self.build_chunker("fixedhash").chunk_text(
             "# Home Lab\n\nBuild the Proxmox server.", source_path
         )
 
@@ -141,48 +133,6 @@ Tailscale connects remote hosts.
         path.parent.mkdir()
         path.write_text("# Project\n\nShip it.", encoding="utf-8")
 
-        chunks = self.make_chunker().chunk_file(path)
+        chunks = self.build_chunker().chunk_file(path)
 
         assert [chunk.content for chunk in chunks] == ["Ship it."]
-
-
-class TestSplitJournalEntries:
-    def test_multiple_entries(self) -> None:
-        text = "2026-04-10\n\nFirst entry.\n\n2026-04-15\n\nSecond entry.\n"
-        entries = split_journal_entries(text)
-        assert len(entries) == 2
-        assert "First entry" in entries[0][1]
-        assert "Second entry" in entries[1][1]
-
-    def test_preamble_before_first_date(self) -> None:
-        text = "---\ntags: [x]\n---\n\n2026-04-10\n\nBody."
-        entries = split_journal_entries(text)
-        # Preamble (front-matter) + one dated entry.
-        assert len(entries) == 2
-        assert entries[0][0] == "preamble"
-
-    def test_no_dates(self) -> None:
-        text = "Just some text without dates."
-        entries = split_journal_entries(text)
-        assert len(entries) == 1
-        assert entries[0][1] == text
-
-    def test_long_form_date_header(self) -> None:
-        text = "April 15, 2026\n\nLong form date entry.\n"
-        entries = split_journal_entries(text)
-        assert len(entries) == 1
-        assert "Long form date entry" in entries[0][1]
-
-
-class TestMakeChunker:
-    def test_journal_path(self, tmp_path: Path) -> None:
-        path = tmp_path / "journals" / "x.md"
-        extractor = MetadataExtractor(ChunkerConfig())
-        chunker = make_chunker(path, ChunkerConfig(), extractor)
-        assert isinstance(chunker, MarkdownASTChunker)
-
-    def test_notes_path(self, tmp_path: Path) -> None:
-        path = tmp_path / "notes" / "x.md"
-        extractor = MetadataExtractor(ChunkerConfig())
-        chunker = make_chunker(path, ChunkerConfig(), extractor)
-        assert isinstance(chunker, MarkdownASTChunker)

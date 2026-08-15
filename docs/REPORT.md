@@ -14,7 +14,7 @@ CLI → Search Engine / Indexer → Repository + Embedder → LanceDB / Ollama
                                    Models
 ```
 
-Every layer boundary is defined by a `Protocol` (`Embedder`, `Chunker`, `ChunkRepository`), making each layer independently testable and swappable. LanceDB code is confined to a single file (`repository.py`); Ollama HTTP code is confined to a single class (`OllamaEmbedder`).
+External service boundaries use protocols (`Embedder` and `ChunkRepository`), while all chunking uses the concrete `MarkdownASTChunker`. LanceDB code is confined to a single file (`repository.py`); Ollama HTTP code is confined to a single class (`OllamaEmbedder`).
 
 The system integrates with the existing Tier 1 (structured markdown palace) without modifying it. Tier 1 and Tier 2 share the same MindPalace directory but are independent: Tier 1 is markdown files read directly by Claude; Tier 2 is a vector index queried via the CLI or a future MCP server. The planned skills layer will fuse the two by reading Tier 1 deterministically and calling Tier 2's `semantic_search()` for unstructured recall.
 
@@ -30,7 +30,7 @@ src/palace/
 ├── metadata/
 │   └── extractor.py     — MetadataExtractor, extract_date, infer_domain, extract_tags
 ├── indexing/
-│   ├── chunker.py       — Chunker protocol, JournalChunker, NoteChunker, make_chunker factory
+│   ├── chunker.py       — MarkdownASTChunker
 │   ├── hash_cache.py    — HashCache (JSON-backed), FileEntry
 │   ├── indexer.py       — IncrementalIndexer (delta pipeline), IndexResult
 │   └── repository.py    — ChunkRepository protocol, LanceDBRepository, _escape_sql_string
@@ -49,8 +49,8 @@ docs/                     — 7 documentation files
 
 ## Implementation decisions
 
-### 1. Protocol-based layer boundaries
-`Embedder`, `Chunker`, and `ChunkRepository` are `typing.Protocol` classes. Production implementations and test doubles both satisfy them. This eliminates mock patching — tests inject `FakeEmbedder` and real LanceDB (in temp directories) directly.
+### 1. Focused abstraction boundaries
+`Embedder` and `ChunkRepository` are `typing.Protocol` classes because they have external implementations and test doubles. Chunking uses the concrete `MarkdownASTChunker` directly.
 
 ### 2. Frozen Pydantic models
 All domain objects use `ConfigDict(frozen=True)`. Chunks, metadata, and search results are immutable as they flow through the pipeline. The indexer creates new `Chunk` instances with embeddings attached rather than mutating existing ones.
@@ -58,8 +58,8 @@ All domain objects use `ConfigDict(frozen=True)`. Chunks, metadata, and search r
 ### 3. Content-hash incremental indexing
 File content is SHA-256 hashed; the hash is persisted in a JSON cache. On each `palace index` run, only files whose hash changed are re-chunked and re-embedded. Unchanged files are skipped entirely — no embedding work, no DB writes. This makes incremental indexing proportional to what changed, not to corpus size.
 
-### 4. Journal chunking: one entry per chunk
-Journal files are split on date headers (ISO, long-form, and slash dates). Each dated entry becomes one chunk, preserving narrative coherence. Entries exceeding 2× the target token budget are sub-split using a word-budget fallback. This is better than fixed-size chunking for journals because an entry is the natural unit of meaning.
+### 4. Semantic Markdown chunking
+`MarkdownASTChunker` handles all document domains. Markdown headings define section boundaries, heading hierarchy supplies context for YAKE keyword extraction, and headerless documents remain a single chunk.
 
 ### 5. Metadata pre-filtering in LanceDB
 Domain, date range, and tags are pushed down to LanceDB as a SQL WHERE clause before vector search. This narrows the candidate set before the vector comparison runs, keeping search fast over large corpora. All SQL string values are escaped via `_escape_sql_string()` to prevent injection.

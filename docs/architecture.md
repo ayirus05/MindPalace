@@ -8,7 +8,7 @@ MindPalace Tier 2 is a local-first semantic memory engine. It indexes unstructur
 
 **Layered architecture with one-directional dependencies.** Models depend on nothing. Metadata extraction depends on models. The embedder depends on models. The chunker depends on models + metadata. The repository depends on models + LanceDB. The indexer depends on all of the above. The search engine depends on the embedder + repository + ranker. The CLI depends on everything. No layer reaches downward past its own scope.
 
-**Protocol-based boundaries.** `Embedder`, `Chunker`, and `ChunkRepository` are `Protocol` classes. Production implementations (OllamaEmbedder, LanceDBRepository) and test doubles (FakeEmbedder) both satisfy them. This makes every layer independently testable and swappable.
+**Protocol-based external boundaries.** `Embedder` and `ChunkRepository` are `Protocol` classes. Production implementations (OllamaEmbedder, LanceDBRepository) and test doubles (FakeEmbedder) both satisfy them. Chunking has one concrete implementation, `MarkdownASTChunker`.
 
 **No raw database code outside the repository.** LanceDB is imported in exactly one file: `repository.py`. If you ever want to swap LanceDB for Qdrant, Pinecone, or pgvector, you replace one file.
 
@@ -54,11 +54,7 @@ query string
 
 ## Chunking strategy
 
-Two chunkers, selected by the `make_chunker()` factory based on the source file's inferred domain:
-
-**JournalChunker** — one chunk per dated entry. Recognizes ISO dates (`2026-04-15`), long-form dates (`April 15, 2026`), and slash dates (`15/4/2026`) as entry headers. Each entry is kept intact to preserve narrative coherence. Entries exceeding 2× the target token budget are sub-split using the word-budget splitter.
-
-**NoteChunker** — sliding word window. Splits non-journal text into ~300-token chunks with ~40-token overlap (both configurable). YAML front-matter is preserved on the first chunk so tag extraction works.
+`MarkdownASTChunker` handles every document domain. It parses Markdown headings, emits one chunk per heading-delimited section, and carries the heading hierarchy into keyword extraction as a context path. Headerless documents become a single chunk. Each result is a validated `Chunk` populated through `MetadataExtractor`.
 
 ## Metadata extraction
 

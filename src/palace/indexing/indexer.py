@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from palace.embeddings.manager import Embedder
-from palace.indexing.chunker import Chunker, make_chunker
+from palace.indexing.chunker import MarkdownASTChunker
 from palace.indexing.hash_cache import HashCache
 from palace.indexing.repository import ChunkRepository
 from palace.metadata.extractor import MetadataExtractor
@@ -52,15 +52,12 @@ class IncrementalIndexer:
         config: PalaceConfig,
         embedder: Embedder,
         repository: ChunkRepository,
-        chunker_factory=None,
         hash_cache: HashCache | None = None,
     ) -> None:
         self._config = config
         self._embedder = embedder
         self._repository = repository
         self._extractor = MetadataExtractor(config.chunker)
-        # Default factory injected here for testability.
-        self._chunker_factory = chunker_factory or make_chunker
         self._hash_cache = hash_cache or HashCache(
             config.resolve(config.indexer.hash_cache_path)
         )
@@ -140,11 +137,10 @@ class IncrementalIndexer:
             return
 
         logger.info("Indexing changed/new file: %s", source_file)
-        chunker: Chunker = self._chunker_factory(
-            path,
+        chunker = MarkdownASTChunker(
             self._config.chunker,
             self._extractor,
-            source_hash=file_hash,
+            source_hash_override=file_hash,
         )
         chunks = chunker.chunk_file(path)
         if not chunks:

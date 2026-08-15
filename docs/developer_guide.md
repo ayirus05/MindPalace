@@ -21,12 +21,12 @@ Every function has type hints on all parameters and return values. The codebase 
 ### Pydantic models
 All domain objects are frozen Pydantic v2 models (`model_config = ConfigDict(frozen=True)`). This prevents accidental mutation of chunks, metadata, and search results as they flow through the pipeline.
 
-### Protocols over concrete classes
-`Embedder`, `Chunker`, and `ChunkRepository` are `typing.Protocol` classes with `@runtime_checkable`. Components depend on the protocol, never the concrete implementation. This makes unit testing trivial — inject a `FakeEmbedder` or mock repository.
+### Protocols at external boundaries
+`Embedder` and `ChunkRepository` are `typing.Protocol` classes with `@runtime_checkable`. Chunking deliberately uses the concrete `MarkdownASTChunker`, the single implementation for every document domain.
 
 ### Dependency injection
 No global state. Every class receives its dependencies via the constructor:
-- `IncrementalIndexer(config, embedder, repository, chunker_factory, hash_cache)`
+- `IncrementalIndexer(config, embedder, repository, hash_cache)`
 - `SemanticSearchEngine(config, embedder, repository, ranker)`
 
 This means tests construct components with test doubles directly, no monkeypatching of module-level globals.
@@ -37,17 +37,17 @@ Each module gets its own logger: `logging.getLogger("palace.<module>")`. The CLI
 ### No raw DB code outside repository.py
 LanceDB is imported in exactly one file. The `ChunkRepository` protocol is the only interface the indexer and search engine use. If you need to add a new DB operation, add it to the protocol and `LanceDBRepository` — don't import `lancedb` elsewhere.
 
-## Adding a new chunker
+## Changing chunking behavior
 
-1. Implement the `Chunker` protocol (a `chunk_file` and `chunk_text` method).
-2. Register it in `make_chunker()` in `indexing/chunker.py` based on the source path's domain.
+1. Update `MarkdownASTChunker` in `indexing/chunker.py`.
+2. Preserve the `chunk_file` and `chunk_text` public methods.
 3. Add tests in `tests/test_chunker.py`.
 
 ## Adding a new metadata field
 
 1. Add the field to `ChunkMetadata` in `models/chunk.py`.
 2. Add it to the LanceDB schema in `repository.py` (`SCHEMA` and `_chunk_to_row`).
-3. Populate it in `MetadataExtractor.build_metadata()` or the chunker's `_build_chunk`.
+3. Populate it in `MetadataExtractor.build_metadata()` or `MarkdownASTChunker.chunk_text()`.
 4. Update `statistics()` if it's worth aggregating.
 5. Add it to `RawHit` and `SearchResult` if it should surface in search.
 

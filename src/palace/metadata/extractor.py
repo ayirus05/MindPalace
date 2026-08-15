@@ -143,7 +143,7 @@ class MetadataExtractor:
     """Composite extractor yielding the content-derived metadata for a chunk.
 
     Structural fields (``chunk_id``, ``created_at``, ``updated_at``) are
-    populated by the :class:`Chunker`, not here — this class is responsible
+    populated by ``MarkdownASTChunker``, not here — this class is responsible
     only for fields derivable from the source path and chunk text.
     """
 
