@@ -46,8 +46,8 @@ class TestIncrementalIndexing:
         assert result.scanned == 1
         assert result.indexed == 1
         assert result.skipped == 0
-        assert result.chunks_created == 3  # three dated entries
-        assert repository.count() == 3
+        assert result.chunks_created == 1  # headerless document fallback
+        assert repository.count() == 1
 
     def test_index_skips_unchanged(self, indexer: IncrementalIndexer, sample_journal: Path, repository: LanceDBRepository) -> None:
         first = indexer.index()
@@ -57,7 +57,7 @@ class TestIncrementalIndexing:
         assert second.indexed == 0
         assert second.skipped == 1
         # Repository still has the chunks.
-        assert repository.count() == 3
+        assert repository.count() == 1
 
     def test_index_reindexes_changed(self, indexer: IncrementalIndexer, sample_journal: Path, repository: LanceDBRepository) -> None:
         indexer.index()
@@ -72,10 +72,10 @@ class TestIncrementalIndexing:
 
     def test_index_deletes_removed_file(self, indexer: IncrementalIndexer, sample_journal: Path, repository: LanceDBRepository) -> None:
         indexer.index()
-        assert repository.count() == 3
+        assert repository.count() == 1
         sample_journal.unlink()
         result = indexer.index()
-        assert result.deleted == 3
+        assert result.deleted == 1
         assert repository.count() == 0
 
     def test_index_multiple_files(self, indexer: IncrementalIndexer, sample_journal: Path, sample_note: Path, repository: LanceDBRepository) -> None:
@@ -121,7 +121,7 @@ class TestIndexerVerify:
         assert "stale_files" in result
         assert "missing_files" in result
         assert result["cached_files"] == 1
-        assert result["repository_chunks"] == 3
+        assert result["repository_chunks"] == 1
         assert result["healthy_files"] == 1
         assert result["stale_files"] == 0
         assert result["missing_files"] == 0
