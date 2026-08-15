@@ -167,28 +167,42 @@ class _FakeClient(httpx.Client):
         self.call_count = 0
         self.calls: list[str] = []
 
+    def _normalize_response(self, resp, method: str, url: str):
+        if isinstance(resp, httpx.Response):
+            if getattr(resp, "_request", None) is None:
+                return httpx.Response(
+                    status_code=resp.status_code,
+                    content=resp.content,
+                    headers=resp.headers,
+                    request=httpx.Request(method, url),
+                )
+        return resp
+
     def get(self, url, **kwargs):
         self.calls.append(url)
         self.call_count += 1
         path = url.split("localhost:11434")[-1] if "localhost" in url else url
         resp = self._responses.get(path)
         if isinstance(resp, list):
-            return resp.pop(0)
+            resp = resp.pop(0)
         if isinstance(resp, Exception):
             raise resp
-        return resp or httpx.Response(404)
+        resp = self._normalize_response(resp, "GET", url)
+        return resp or httpx.Response(404, request=httpx.Request("GET", url))
 
     def post(self, url, json=None, **kwargs):
         self.calls.append(url)
         self.call_count += 1
         from urllib.parse import urlparse
+
         path = urlparse(url).path
         resp = self._responses.get(path)
         if isinstance(resp, list):
-            return resp.pop(0)
+            resp = resp.pop(0)
         if isinstance(resp, Exception):
             raise resp
-        return resp or httpx.Response(404)
+        resp = self._normalize_response(resp, "POST", url)
+        return resp or httpx.Response(404, request=httpx.Request("POST", url))
 
 
 class _FailingClient(httpx.Client):

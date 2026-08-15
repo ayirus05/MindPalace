@@ -22,6 +22,7 @@ class SearchRanker:
 
     Signals combined:
       * Semantic similarity (the base score from the vector store).
+      * Keyword overlap: a bonus for exact YAKE keyword matches.
       * Recency: a small bonus for results within ``recency_boost_days``.
       * Domain preference: multiply by a per-domain weight (default 1.0).
       * Duplicate suppression: if two hits come from the same source file,
@@ -36,13 +37,23 @@ class SearchRanker:
         self,
         hits: list[RawHit],
         as_of: datetime | None = None,
+        query_keywords: list[str] | None = None,
     ) -> list[SearchResult]:
         if not hits:
             return []
         now = as_of or datetime.utcnow()
+        normalized_query_keywords = {
+            keyword.casefold().strip() for keyword in query_keywords or [] if keyword.strip()
+        }
         scored: list[tuple[float, RawHit]] = []
         for hit in hits:
             score = hit.score
+            hit_keywords = {
+                keyword.casefold().strip() for keyword in hit.keywords if keyword.strip()
+            }
+            matching_keywords = normalized_query_keywords & hit_keywords
+            if matching_keywords:
+                score += self._config.keyword_boost_amount * len(matching_keywords)
             # Recency boost.
             if hit.date is not None:
                 age_days = (now.date() - hit.date).days
@@ -75,6 +86,7 @@ class SearchRanker:
                 metadata={
                     "word_count": h.word_count,
                     "domain": h.domain.value,
+                    "keywords": h.keywords,
                 },
             )
             for s, h in top

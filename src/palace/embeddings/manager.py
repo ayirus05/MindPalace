@@ -141,7 +141,13 @@ class OllamaEmbedder:
     def _post_embed(self, batch: list[str]) -> list[list[float]]:
         payload = {"model": self._config.model, "input": batch}
         resp = self._client.post(self._endpoint, json=payload)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            try:
+                resp.raise_for_status()
+            except Exception as exc:
+                raise EmbeddingError(
+                    f"Ollama request failed with status {resp.status_code}: {exc}"
+                ) from exc
         data = resp.json()
         # Ollama's /api/embed returns {"embeddings": [[...], ...]}.
         embeddings = data.get("embeddings")

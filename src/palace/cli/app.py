@@ -24,8 +24,12 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from palace.embeddings.manager import Embedder, FakeEmbedder, OllamaEmbedder
 from palace.indexing.indexer import IncrementalIndexer
 from palace.indexing.repository import ChunkRepository, LanceDBRepository
+from palace.llm.factory import get_llm_provider
 from palace.models.config import PalaceConfig
 from palace.search.engine import SemanticSearchEngine
+from palace.skills.loader import SkillRegistry
+from palace.skills.memory_tools import configure_memory_tools
+from palace.skills.router import MemoryAgent
 from palace.utils.logging import configure_logging
 from palace.vault.manager import FileVaultManager
 
@@ -154,6 +158,102 @@ def write_vault_field(
 
 
 @app.command()
+def chat(
+    config_path: ConfigOption = None,
+    skill_names: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--skill",
+            "-s",
+            help="Markdown skill to activate; repeat for multiple skills.",
+        ),
+    ] = None,
+    provider_name: Annotated[
+        Optional[str],
+        typer.Option("--provider", help="LLM backend: ollama or gemini."),
+    ] = None,
+    model_name: Annotated[
+        Optional[str],
+        typer.Option("--model", help="Model name for the selected provider."),
+    ] = None,
+) -> None:
+    """Chat with the memory agent."""
+    cfg = _load_config(config_path)
+    provider_type = (provider_name or cfg.llm.provider or "ollama").strip().lower()
+    provider_model = model_name or cfg.llm.model or "llama3.1"
+    provider = get_llm_provider(
+        provider_type,
+        provider_model,
+        api_key=cfg.llm.api_key or os.environ.get("GEMINI_API_KEY"),
+        host=cfg.llm.host,
+    )
+    embedder = _make_embedder(cfg)
+    repo = _make_repository(cfg)
+    vault = FileVaultManager(cfg)
+    search_engine = SemanticSearchEngine(cfg, embedder, repo)
+    configure_memory_tools(
+        vault_manager=vault,
+        search_engine=search_engine,
+    )
+    registry = SkillRegistry()
+    try:
+        agent = MemoryAgent(
+            model=provider_model,
+            registry=registry,
+            active_skills=skill_names,
+            provider=provider,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    console.print(
+        "[dim]Commands: /skills, /skill <name[,name...]>, /skill off, exit[/dim]"
+    )
+
+    while True:
+        user_input = console.input("[bold green]You:[/bold green]\n")
+        command = user_input.strip()
+
+        if not command.startswith("/"):
+            response = agent.chat(user_input)
+            console.print(f"[bold blue]Palace:[/bold blue] {response}")
+            continue
+
+        if command.lower() in {"exit", "quit"}:
+            break
+        if command == "/skills":
+            names = sorted(registry.skills)
+            console.print(
+                "[cyan]Available skills:[/cyan] " + (", ".join(names) or "none")
+            )
+            continue
+        if command == "/skill":
+            active = ", ".join(skill.name for skill in agent.active_skills) or "none"
+            console.print(f"[cyan]Active skills:[/cyan] {active}")
+            continue
+        if command.startswith("/skill "):
+            requested_skill = command.removeprefix("/skill ").strip()
+            if requested_skill.lower() in {"off", "none"}:
+                agent.set_active_skills(None)
+                console.print("[yellow]Active skills cleared.[/yellow]")
+                continue
+            requested_skills = [
+                name.strip() for name in requested_skill.split(",") if name.strip()
+            ]
+            try:
+                agent.set_active_skills(requested_skills)
+            except ValueError as exc:
+                console.print(f"[red]{exc}[/red]")
+            else:
+                console.print(
+                    f"[green]Active skills:[/green] {', '.join(requested_skills)}"
+                )
+            continue
+        console.print("[yellow]Unknown command.[/yellow]")
+
+
+@app.command()
 def index(
     config_path: ConfigOption = None,
     reindex: Annotated[bool, typer.Option("--reindex", help="Force re-index all files")] = False,
@@ -215,8 +315,8 @@ def search(
     date_from: Annotated[Optional[str], typer.Option("--from")] = None,
     date_to: Annotated[Optional[str], typer.Option("--to")] = None,
     tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t")] = None,
-    top_k: Annotated[int, typer.Option("--top-k", "-k")] = 8,
-    minimum_score: Annotated[float, typer.Option("--min-score")] = 0.15,
+    top_k: Annotated[int, typer.Option("--top-k", "-k")] = None,
+    minimum_score: Annotated[float, typer.Option("--min-score")] = None,
     json_out: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
 ) -> None:
     """Semantic search across journals, notes, and transcripts."""

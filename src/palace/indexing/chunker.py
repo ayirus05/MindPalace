@@ -1,26 +1,138 @@
-"""Chunking strategies: journals split by dated entry, other notes by token budget.
-
-The :class:`Chunker` protocol keeps the indexer decoupled from the concrete
-splitting logic.  :class:`JournalChunker` recognises date markers and emits
-one chunk per dated entry; :class:`NoteChunker` uses a sliding word window
-to hit a target token count with configurable overlap.
-"""
+"""Semantic Markdown chunking based on heading hierarchy."""
 
 from __future__ import annotations
 
-import logging
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from markdown_it import MarkdownIt
+
+from palace.metadata.keywords import extract_keywords
 from palace.metadata.extractor import MetadataExtractor
-from palace.models.chunk import Chunk, ChunkMetadata, DocumentDomain
+from palace.models.chunk import Chunk, ChunkMetadata
 from palace.models.config import ChunkerConfig
-from palace.utils.hashing import TextEstimator, sha256_text
 
 
-logger = logging.getLogger("palace.chunker")
+class MarkdownASTChunker:
+    """Split Markdown into semantic sections based on heading hierarchy.
+
+    Heading text is carried in ``context_path`` rather than repeated in the
+    section body.  The body itself is sliced from the source so Markdown
+    formatting (including lists, links, and fenced code) remains intact.
+    """
+
+    def __init__(
+        self,
+        config: ChunkerConfig,
+        extractor: MetadataExtractor,
+        source_hash_override: str | None = None,
+    ) -> None:
+        self._config = config
+        self._extractor = extractor
+        self._source_hash_override = source_hash_override
+        self._markdown = MarkdownIt("commonmark")
+
+    def chunk_file(self, path: Path) -> list[Chunk]:
+        """Read and chunk a UTF-8 Markdown file."""
+        return self.chunk_text(path.read_text(encoding="utf-8"), path)
+
+    def chunk_text(self, text: str, source_path: Path) -> list[Chunk]:
+        """Convert heading-delimited sections into validated chunks."""
+        source_hash = self._source_hash_override or sha256_file_safe(source_path, text)
+        chunks: list[Chunk] = []
+        for section in self.chunk_by_headers(text):
+            section_text = section["text"]
+            domain, d, tags, content_hash, wc, tok = self._extractor.build_metadata(
+                source_path, section_text, source_hash
+            )
+            metadata = ChunkMetadata(
+                source_file=str(source_path),
+                source_file_hash=source_hash,
+                domain=domain,
+                date=d,
+                tags=tags,
+                keywords=section["keywords"],
+                content_hash=content_hash,
+                word_count=wc,
+                token_estimate=tok,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+            chunks.append(Chunk(metadata=metadata, content=section_text))
+        return chunks
+
+    def chunk_by_headers(self, markdown_text: str) -> list[dict]:
+        """Return one embedding payload per heading-delimited section."""
+        tokens = self._markdown.parse(markdown_text)
+        lines = markdown_text.splitlines(keepends=True)
+        active_headers: dict[int, str] = {}
+        chunks: list[dict] = []
+
+        headings: list[tuple[int, int, int, str]] = []
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+            if token.type != "heading_open" or token.map is None:
+                index += 1
+                continue
+
+            level = int(token.tag.removeprefix("h"))
+            heading_text = ""
+            heading_end = token.map[1]
+            index += 1
+            while index < len(tokens) and tokens[index].type != "heading_close":
+                if tokens[index].type == "inline":
+                    heading_text = tokens[index].content.strip()
+                index += 1
+            headings.append((token.map[0], heading_end, level, heading_text))
+            index += 1
+
+        if not headings:
+            text = markdown_text.strip()
+            if not text:
+                return []
+            embed_text = f"Context: \n\n{text}"
+            return [
+                {
+                    "context_path": "",
+                    "text": text,
+                    "embed_text": embed_text,
+                    "keywords": extract_keywords(embed_text),
+                }
+            ]
+
+        for heading_index, (_start, body_start, level, heading_text) in enumerate(headings):
+            body_end = (
+                headings[heading_index + 1][0]
+                if heading_index + 1 < len(headings)
+                else len(lines)
+            )
+
+            for existing_level in list(active_headers):
+                if existing_level >= level:
+                    del active_headers[existing_level]
+            active_headers[level] = heading_text
+            context_path = " > ".join(
+                active_headers[header_level]
+                for header_level in sorted(active_headers)
+            )
+
+            # Keep every heading as its own chunk, including headings with no
+            # direct body before a nested child. The context still gives YAKE
+            # useful section-specific nouns in that case.
+            text = "".join(lines[body_start:body_end]).strip()
+            embed_text = f"Context: {context_path}\n\n{text}"
+            chunks.append(
+                {
+                    "context_path": context_path,
+                    "text": text,
+                    "embed_text": embed_text,
+                    "keywords": extract_keywords(embed_text),
+                }
+            )
+        return chunks
 
 
 @runtime_checkable
@@ -73,146 +185,6 @@ def split_journal_entries(text: str) -> list[tuple[str, str]]:
     return entries
 
 
-# ---- Concrete chunkers -----------------------------------------------------
-
-
-class JournalChunker:
-    """Chunker for journal files: one chunk per dated entry.
-
-    Each entry may correspond to a day; entry text is kept intact (not
-    re-split) to preserve narrative coherence.  If an entry is extremely
-    long, it is further split using the token-budget splitter.
-    """
-
-    def __init__(
-        self,
-        config: ChunkerConfig,
-        extractor: MetadataExtractor,
-        source_hash_override: str | None = None,
-    ) -> None:
-        self._config = config
-        self._extractor = extractor
-        self._estimator = TextEstimator(tokens_per_word=config.tokens_per_word)
-        self._source_hash_override = source_hash_override
-
-    def chunk_file(self, path: Path) -> list[Chunk]:
-        text = path.read_text(encoding="utf-8")
-        return self.chunk_text(text, path)
-
-    def chunk_text(self, text: str, source_path: Path) -> list[Chunk]:
-        source_hash = self._source_hash_override or sha256_file_safe(source_path, text)
-        entries = split_journal_entries(text)
-        chunks: list[Chunk] = []
-        for header, body in entries:
-            # Strip front-matter-only preambles (handled in extractor tags).
-            if header == "preamble" and body.startswith("---"):
-                continue
-            body_hash = sha256_text(body)
-            target = self._config.target_tokens
-            if self._estimator.token_estimate(body) <= target * 2:
-                chunks.append(self._build_chunk(source_path, body, source_hash))
-            else:
-                # Long entry: split into token-budgeted sub-chunks.
-                for segment in self._estimator.split_to_token_budget(body, target):
-                    chunks.append(self._build_chunk(source_path, segment, source_hash))
-        if not chunks:
-            logger.debug("No chunks produced from %s", source_path)
-        return chunks
-
-    def _build_chunk(self, source_path: Path, text: str, source_hash: str) -> Chunk:
-        domain, d, tags, content_hash, wc, tok = self._extractor.build_metadata(
-            source_path, text, source_hash
-        )
-        metadata = ChunkMetadata(
-            source_file=str(source_path),
-            source_file_hash=source_hash,
-            domain=domain,
-            date=d,
-            tags=tags,
-            content_hash=content_hash,
-            word_count=wc,
-            token_estimate=tok,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-        )
-        return Chunk(metadata=metadata, content=text)
-
-
-class NoteChunker:
-    """Chunker for general notes: sliding word window with overlap.
-
-    Honours ``target_tokens`` and ``overlap_tokens`` from the configuration.
-    YAML front-matter is preserved as part of the first chunk so metadata
-    extraction still works.
-    """
-
-    def __init__(
-        self,
-        config: ChunkerConfig,
-        extractor: MetadataExtractor,
-        source_hash_override: str | None = None,
-    ) -> None:
-        self._config = config
-        self._extractor = extractor
-        self._estimator = TextEstimator(tokens_per_word=config.tokens_per_word)
-        self._source_hash_override = source_hash_override
-
-    def chunk_file(self, path: Path) -> list[Chunk]:
-        text = path.read_text(encoding="utf-8")
-        return self.chunk_text(text, path)
-
-    def chunk_text(self, text: str, source_path: Path) -> list[Chunk]:
-        source_hash = self._source_hash_override or sha256_file_safe(source_path, text)
-
-        # Preserve front-matter on the first chunk for tag extraction.
-        fm_match = re.match(r"\A---\s*\n.*?\n---\s*\n", text, re.DOTALL)
-        front_matter = fm_match.group(0) if fm_match else ""
-        body = text[fm_match.end():] if fm_match else text
-
-        words = body.split()
-        if not words:
-            return []
-
-        target_tokens = max(1, self._config.target_tokens)
-        # Convert token budget to word budget.
-        target_words = max(1, int(target_tokens / self._config.tokens_per_word))
-        overlap_words = max(0, int(self._config.overlap_tokens / self._config.tokens_per_word))
-        step = max(1, target_words - overlap_words)
-
-        chunks: list[Chunk] = []
-        i = 0
-        first = True
-        while i < len(words):
-            window = words[i : i + target_words]
-            segment_text = (" ".join(window)).strip()
-            if segment_text:
-                full_text = f"{front_matter}{segment_text}" if first else segment_text
-                chunks.append(self._build_chunk(source_path, full_text, source_hash))
-                first = False
-            if i + target_words >= len(words):
-                break
-            i += step
-        return chunks
-
-    def _build_chunk(self, source_path: Path, text: str, source_hash: str) -> Chunk:
-        domain, d, tags, content_hash, wc, tok = self._extractor.build_metadata(
-            source_path, text, source_hash
-        )
-        metadata = ChunkMetadata(
-            source_file=str(source_path),
-            source_file_hash=source_hash,
-            domain=domain,
-            date=d,
-            tags=tags,
-            content_hash=content_hash,
-            word_count=wc,
-            token_estimate=tok,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-        )
-        return Chunk(metadata=metadata, content=text)
-
-
 # ---- Factory --------------------------------------------------------------
 
 def sha256_file_safe(path: Path, text: str) -> str:
@@ -231,19 +203,14 @@ def make_chunker(
     extractor: MetadataExtractor,
     source_hash: str | None = None,
 ) -> Chunker:
-    """Pick the right chunker for ``source_path`` based on its domain."""
-    from palace.metadata.extractor import infer_domain
-
-    domain = infer_domain(source_path)
-    if domain == DocumentDomain.JOURNAL:
-        return JournalChunker(config, extractor, source_hash_override=source_hash)
-    return NoteChunker(config, extractor, source_hash_override=source_hash)
+    """Build the semantic Markdown chunker used for every document domain."""
+    return MarkdownASTChunker(config, extractor, source_hash_override=source_hash)
 
 
 __all__ = [
     "Chunker",
-    "JournalChunker",
-    "NoteChunker",
+    "MarkdownASTChunker",
+    "extract_keywords",
     "make_chunker",
     "split_journal_entries",
     "sha256_file_safe",

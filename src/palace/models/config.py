@@ -20,7 +20,7 @@ class EmbeddingConfig(BaseModel):
     model: str = "nomic-embed-text"
     host: str = "http://localhost:11434"
     timeout_seconds: float = 60.0
-    batch_size: int = 32
+    batch_size: int = Field(default=32, ge=1)
     max_retries: int = 4
     retry_initial_wait_seconds: float = 1.0
     retry_max_wait_seconds: float = 30.0
@@ -60,6 +60,7 @@ class SearchConfig(BaseModel):
     minimum_score: float = 0.15
     recency_boost_days: int = 90
     recency_boost_amount: float = 0.15
+    keyword_boost_amount: float = 0.2
     deduplicate_by_source: bool = True
     domain_weights: dict[str, float] = Field(default_factory=dict)
 
@@ -81,6 +82,15 @@ class LoggingConfig(BaseModel):
     file_path: str | None = "data/logs/palace.log"
 
 
+class LLMConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str = "ollama"
+    model: str = "llama3.1"
+    api_key: str | None = None
+    host: str = "http://localhost:11434"
+
+
 class PalaceConfig(BaseModel):
     """Top-level configuration.  ``project_root`` is resolved at load time."""
 
@@ -93,6 +103,7 @@ class PalaceConfig(BaseModel):
     search: SearchConfig = Field(default_factory=SearchConfig)
     vault: VaultConfig = Field(default_factory=VaultConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
     project_root: Path = Path(".")
 
     def resolve(self, path: str | Path) -> Path:

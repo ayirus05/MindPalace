@@ -8,6 +8,9 @@ dist/
 build/
 .eggs/
 
+.env
+.env.*
+
 # Virtual environments
 .venv/
 venv/
@@ -37,3 +40,4 @@ Thumbs.db
 data/**
 !data/**/
 !data/**/.gitkeep
+!data/skills/**

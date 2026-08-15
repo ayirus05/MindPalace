@@ -29,7 +29,11 @@ def tmp_project(tmp_path: Path) -> Path:
 @pytest.fixture
 def config(tmp_project: Path) -> PalaceConfig:
     """A PalaceConfig rooted at the temp project."""
-    return PalaceConfig.default_for(tmp_project)
+    cfg = PalaceConfig.default_for(tmp_project)
+    cfg.indexer.source_dirs = ["journals"]
+    cfg.database.path = "index/vector.lancedb"
+    cfg.indexer.hash_cache_path = "cache/hash_cache.json"
+    return cfg
 
 
 @pytest.fixture

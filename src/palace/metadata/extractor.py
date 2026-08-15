@@ -36,7 +36,7 @@ _MONTH_ABBR = {
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }
 _MONTH_FULL = {m.lower(): i for i, m in enumerate(
-    ["", "January", "February", "March", "April", "May", "June",
+    ["January", "February", "March", "April", "May", "June",
      "July", "August", "September", "October", "November", "December"], start=1)}
 
 

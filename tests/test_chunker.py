@@ -4,17 +4,146 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from palace.indexing.chunker import (
-    JournalChunker,
-    NoteChunker,
+    Chunker,
+    MarkdownASTChunker,
     make_chunker,
     split_journal_entries,
 )
 from palace.metadata.extractor import MetadataExtractor
 from palace.models.chunk import DocumentDomain
 from palace.models.config import ChunkerConfig
+
+
+class TestMarkdownASTChunker:
+    @staticmethod
+    def make_chunker(source_hash: str | None = None) -> MarkdownASTChunker:
+        config = ChunkerConfig()
+        return MarkdownASTChunker(
+            config,
+            MetadataExtractor(config),
+            source_hash_override=source_hash,
+        )
+
+    def test_chunks_by_header_hierarchy(self) -> None:
+        markdown = """# 2026 Goals
+
+Plan for the year.
+
+## Home Lab
+
+Build the new server.
+
+### Networking
+
+- Configure VLANs
+- Add firewall rules
+
+## Fitness
+
+Run three times a week.
+"""
+
+        chunks = self.make_chunker().chunk_by_headers(markdown)
+
+        assert [
+            {key: value for key, value in chunk.items() if key != "keywords"}
+            for chunk in chunks
+        ] == [
+            {
+                "context_path": "2026 Goals",
+                "text": "Plan for the year.",
+                "embed_text": "Context: 2026 Goals\n\nPlan for the year.",
+            },
+            {
+                "context_path": "2026 Goals > Home Lab",
+                "text": "Build the new server.",
+                "embed_text": (
+                    "Context: 2026 Goals > Home Lab\n\nBuild the new server."
+                ),
+            },
+            {
+                "context_path": "2026 Goals > Home Lab > Networking",
+                "text": "- Configure VLANs\n- Add firewall rules",
+                "embed_text": (
+                    "Context: 2026 Goals > Home Lab > Networking\n\n"
+                    "- Configure VLANs\n- Add firewall rules"
+                ),
+            },
+            {
+                "context_path": "2026 Goals > Fitness",
+                "text": "Run three times a week.",
+                "embed_text": (
+                    "Context: 2026 Goals > Fitness\n\nRun three times a week."
+                ),
+            },
+        ]
+        assert all(chunk["keywords"] for chunk in chunks)
+        assert all(
+            isinstance(keyword, str)
+            for chunk in chunks
+            for keyword in chunk["keywords"]
+        )
+
+    def test_creates_one_chunk_per_header_including_empty_parent(self) -> None:
+        markdown = """# Home Lab
+
+Lab overview.
+
+## Proxmox
+
+### LXC Containers
+
+Tailscale runs inside this container.
+
+## Networking
+
+Tailscale connects remote hosts.
+"""
+
+        chunks = self.make_chunker().chunk_by_headers(markdown)
+
+        assert len(chunks) == 4
+        assert [chunk["context_path"] for chunk in chunks] == [
+            "Home Lab",
+            "Home Lab > Proxmox",
+            "Home Lab > Proxmox > LXC Containers",
+            "Home Lab > Networking",
+        ]
+        assert chunks[1]["text"] == ""
+        assert "Tailscale" not in chunks[0]["embed_text"]
+        assert "Tailscale" in chunks[2]["embed_text"]
+
+        proxmox_keywords = " ".join(chunks[1]["keywords"]).casefold()
+        tailscale_keywords = " ".join(chunks[2]["keywords"]).casefold()
+        assert "proxmox" in proxmox_keywords
+        assert "tailscale" in tailscale_keywords
+
+    def test_implements_chunker_protocol(self) -> None:
+        assert isinstance(self.make_chunker(), Chunker)
+
+    def test_chunk_text_builds_validated_chunks_with_keywords(self) -> None:
+        source_path = Path("notes/project.md")
+        chunks = self.make_chunker("fixedhash").chunk_text(
+            "# Home Lab\n\nBuild the Proxmox server.", source_path
+        )
+
+        assert len(chunks) == 1
+        chunk = chunks[0]
+        assert chunk.content == "Build the Proxmox server."
+        assert chunk.metadata.source_file == str(source_path)
+        assert chunk.metadata.source_file_hash == "fixedhash"
+        assert chunk.metadata.domain == DocumentDomain.NOTES
+        assert chunk.metadata.keywords
+
+    def test_chunk_file_reads_markdown(self, tmp_path: Path) -> None:
+        path = tmp_path / "notes" / "project.md"
+        path.parent.mkdir()
+        path.write_text("# Project\n\nShip it.", encoding="utf-8")
+
+        chunks = self.make_chunker().chunk_file(path)
+
+        assert [chunk.content for chunk in chunks] == ["Ship it."]
 
 
 class TestSplitJournalEntries:
@@ -45,104 +174,15 @@ class TestSplitJournalEntries:
         assert "Long form date entry" in entries[0][1]
 
 
-class TestJournalChunker:
-    def test_chunk_file(self, sample_journal: Path) -> None:
-        config = ChunkerConfig()
-        extractor = MetadataExtractor(config)
-        chunker = JournalChunker(config, extractor)
-        chunks = chunker.chunk_file(sample_journal)
-        assert len(chunks) == 3  # one per dated entry
-        # All chunks should have the journal domain.
-        for c in chunks:
-            assert c.metadata.domain == DocumentDomain.JOURNAL
-        # Dates should be parsed.
-        dates = [c.metadata.date for c in chunks if c.metadata.date]
-        assert len(dates) >= 2
-
-    def test_chunks_carry_source_hash(self, sample_journal: Path) -> None:
-        config = ChunkerConfig()
-        extractor = MetadataExtractor(config)
-        chunker = JournalChunker(config, extractor, source_hash_override="fixedhash")
-        chunks = chunker.chunk_file(sample_journal)
-        for c in chunks:
-            assert c.metadata.source_file_hash == "fixedhash"
-
-    def test_empty_file(self, tmp_path: Path) -> None:
-        p = tmp_path / "empty.md"
-        p.write_text("", encoding="utf-8")
-        config = ChunkerConfig()
-        extractor = MetadataExtractor(config)
-        chunker = JournalChunker(config, extractor)
-        assert chunker.chunk_file(p) == []
-
-    def test_long_entry_split(self, tmp_path: Path) -> None:
-        """An entry whose token estimate exceeds 2x target gets sub-split."""
-        p = tmp_path / "journals" / "long.md"
-        p.parent.mkdir(parents=True)
-        p.write_text(
-            "2026-04-10\n\n" + ("word " * 1000),
-            encoding="utf-8",
-        )
-        config = ChunkerConfig(target_tokens=50, tokens_per_word=1.0)
-        extractor = MetadataExtractor(config)
-        chunker = JournalChunker(config, extractor)
-        chunks = chunker.chunk_file(p)
-        assert len(chunks) > 1
-
-
-class TestNoteChunker:
-    def test_chunk_file_short(self, sample_note: Path) -> None:
-        config = ChunkerConfig(target_tokens=300, overlap_tokens=40)
-        extractor = MetadataExtractor(config)
-        chunker = NoteChunker(config, extractor)
-        chunks = chunker.chunk_file(sample_note)
-        # Short note should produce one chunk.
-        assert len(chunks) == 1
-        assert "finance" in sample_note.read_text()
-        # Front-matter tags should be extracted.
-        assert "finance" in chunks[0].metadata.tags
-
-    def test_chunk_long_note(self, tmp_path: Path) -> None:
-        p = tmp_path / "notes" / "long.md"
-        p.parent.mkdir(parents=True)
-        p.write_text(" ".join(f"word{i}" for i in range(500)), encoding="utf-8")
-        config = ChunkerConfig(target_tokens=50, overlap_tokens=10, tokens_per_word=1.0)
-        extractor = MetadataExtractor(config)
-        chunker = NoteChunker(config, extractor)
-        chunks = chunker.chunk_file(p)
-        assert len(chunks) > 1
-        # Overlap means consecutive chunks share words.
-        assert len(chunks) >= 8
-
-    def test_source_hash_override(self, sample_note: Path) -> None:
-        config = ChunkerConfig()
-        extractor = MetadataExtractor(config)
-        chunker = NoteChunker(config, extractor, source_hash_override="override")
-        chunks = chunker.chunk_file(sample_note)
-        assert all(c.metadata.source_file_hash == "override" for c in chunks)
-
-    def test_front_matter_preserved_on_first_chunk(self, tmp_path: Path) -> None:
-        p = tmp_path / "notes" / "fm.md"
-        p.parent.mkdir(parents=True)
-        body = " ".join(f"word{i}" for i in range(100))
-        p.write_text(f"---\ntags: [alpha]\n---\n{body}", encoding="utf-8")
-        config = ChunkerConfig(target_tokens=50, tokens_per_word=1.0)
-        extractor = MetadataExtractor(config)
-        chunker = NoteChunker(config, extractor)
-        chunks = chunker.chunk_file(p)
-        assert len(chunks) >= 1
-        assert "alpha" in chunks[0].metadata.tags
-
-
 class TestMakeChunker:
     def test_journal_path(self, tmp_path: Path) -> None:
         path = tmp_path / "journals" / "x.md"
         extractor = MetadataExtractor(ChunkerConfig())
         chunker = make_chunker(path, ChunkerConfig(), extractor)
-        assert isinstance(chunker, JournalChunker)
+        assert isinstance(chunker, MarkdownASTChunker)
 
     def test_notes_path(self, tmp_path: Path) -> None:
         path = tmp_path / "notes" / "x.md"
         extractor = MetadataExtractor(ChunkerConfig())
         chunker = make_chunker(path, ChunkerConfig(), extractor)
-        assert isinstance(chunker, NoteChunker)
+        assert isinstance(chunker, MarkdownASTChunker)

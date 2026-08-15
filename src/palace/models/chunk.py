@@ -47,6 +47,7 @@ class ChunkMetadata(BaseModel):
     domain: DocumentDomain = DocumentDomain.UNKNOWN
     date: Optional[date]
     tags: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
     content_hash: str
     word_count: int = 0
     token_estimate: int = 0
@@ -91,6 +92,7 @@ class RawHit(BaseModel):
     date: Optional[date]
     domain: DocumentDomain = DocumentDomain.UNKNOWN
     tags: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
     word_count: int = 0
 
 
