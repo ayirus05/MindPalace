@@ -97,6 +97,7 @@ class LanceDBRepository:
         pa.field("domain", pa.string()),
         pa.field("date", pa.string()),  # ISO date string; None stored as ""
         pa.field("tags", pa.list_(pa.string())),
+        pa.field("keywords", pa.list_(pa.string())),
         pa.field("content_hash", pa.string()),
         pa.field("word_count", pa.int32()),
         pa.field("token_estimate", pa.int32()),
@@ -128,9 +129,10 @@ class LanceDBRepository:
         """Open or create the LanceDB table."""
         if self._table is not None:
             return
-        existing = self._db.list_tables()
+        existing = self._db.table_names()
         if self._table_name in existing:
             self._table = self._db.open_table(self._table_name)
+            self._migrate_schema()
             return
         if vector_dim is None:
             raise ValueError("Cannot create LanceDB table without vector dimensionality")
@@ -140,6 +142,13 @@ class LanceDBRepository:
             mode="create",
         )
         logger.debug("LanceDB table '%s' ready", self._table_name)
+
+    def _migrate_schema(self) -> None:
+        """Add fields introduced after an index was originally created."""
+        field_names = set(self._table.schema.names)
+        if "keywords" not in field_names:
+            self._table.add_columns(pa.field("keywords", pa.list_(pa.string())))
+            logger.info("Added keywords column to LanceDB table '%s'", self._table_name)
 
     def _row_to_dict(self, row: dict[str, Any]) -> dict[str, Any]:
         """Normalise a LanceDB row into a plain dict with parsed types."""
@@ -160,6 +169,7 @@ class LanceDBRepository:
             "domain": md.domain.value,
             "date": md.date.isoformat() if md.date else "",
             "tags": md.tags or [],
+            "keywords": md.keywords or [],
             "content_hash": md.content_hash,
             "word_count": md.word_count,
             "token_estimate": md.token_estimate,
@@ -191,7 +201,7 @@ class LanceDBRepository:
 
     def delete_chunks(self, source_file: str) -> int:
         """Delete all chunks matching ``source_file``."""
-        if self._table is None and self._table_name not in self._db.list_tables():
+        if self._table is None and self._table_name not in self._db.table_names():
             return 0
         self._ensure_table()
         before = self._table.count_rows()
@@ -224,7 +234,7 @@ class LanceDBRepository:
         LanceDB's filter pushdown narrows the candidate set before the vector
         comparison, keeping the search fast over large tables.
         """
-        if self._table is None and self._table_name not in self._db.list_tables():
+        if self._table is None and self._table_name not in self._db.table_names():
             return []
         self._ensure_table()
         filter_sql = self._build_filter_sql(domain, date_from, date_to, tags)
@@ -259,7 +269,7 @@ class LanceDBRepository:
 
     def filter_by_metadata(self, **filters: Any) -> list[dict[str, Any]]:
         """Return rows matching all given metadata filters (non-vector)."""
-        if self._table is None and self._table_name not in self._db.list_tables():
+        if self._table is None and self._table_name not in self._db.table_names():
             return []
         self._ensure_table()
         clauses: list[str] = []
@@ -292,7 +302,7 @@ class LanceDBRepository:
 
     def vacuum(self) -> dict[str, Any]:
         """Compact the table and reclaim space.  Returns metrics."""
-        if self._table is None and self._table_name not in self._db.list_tables():
+        if self._table is None and self._table_name not in self._db.table_names():
             return {"action": "skipped", "rows_before": 0, "rows_after": 0}
         self._ensure_table()
         before = self._table.count_rows()
@@ -307,7 +317,7 @@ class LanceDBRepository:
 
     def statistics(self) -> dict[str, Any]:
         """Return aggregate stats about the indexed corpus."""
-        if self._table is None and self._table_name not in self._db.list_tables():
+        if self._table is None and self._table_name not in self._db.table_names():
             return {
                 "total_chunks": 0,
                 "unique_source_files": 0,
@@ -348,7 +358,7 @@ class LanceDBRepository:
         }
 
     def count(self) -> int:
-        if self._table is None and self._table_name not in self._db.list_tables():
+        if self._table is None and self._table_name not in self._db.table_names():
             return 0
         self._ensure_table()
         return self._table.count_rows()

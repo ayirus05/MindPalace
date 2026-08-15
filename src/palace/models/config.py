@@ -60,6 +60,7 @@ class SearchConfig(BaseModel):
     minimum_score: float = 0.15
     recency_boost_days: int = 90
     recency_boost_amount: float = 0.15
+    keyword_boost_amount: float = 0.2
     deduplicate_by_source: bool = True
     domain_weights: dict[str, float] = Field(default_factory=dict)
 

@@ -7,11 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from palace.indexing.chunker import NoteChunker
 from palace.indexing.repository import LanceDBRepository
-from palace.metadata.extractor import MetadataExtractor
 from palace.models.chunk import Chunk, ChunkMetadata, DocumentDomain
-from palace.models.config import ChunkerConfig
 
 
 def _make_chunk(
@@ -22,6 +19,7 @@ def _make_chunk(
     domain: DocumentDomain = DocumentDomain.JOURNAL,
     d: date | None = None,
     tags: list[str] | None = None,
+    keywords: list[str] | None = None,
 ) -> Chunk:
     word_count = len(content.split())
     md = ChunkMetadata(
@@ -31,6 +29,7 @@ def _make_chunk(
         domain=domain,
         date=d,
         tags=tags or [],
+        keywords=keywords or [],
         content_hash="content_hash",
         word_count=word_count,
         token_estimate=int(round(word_count * 1.3)),
@@ -49,6 +48,16 @@ class TestLanceDBRepository:
         n = repository.insert_chunks(chunks)
         assert n == 2
         assert repository.count() == 2
+
+    def test_insert_persists_keywords(self, repository: LanceDBRepository) -> None:
+        chunk = _make_chunk(
+            "c1", "/a.md", "hybrid search", [0.1, 0.2], keywords=["hybrid search"]
+        )
+        repository.insert_chunks([chunk])
+
+        result = repository.search(query_vector=[0.1, 0.2], top_k=1)
+
+        assert result[0]["keywords"] == ["hybrid search"]
 
     def test_insert_empty(self, repository: LanceDBRepository) -> None:
         assert repository.insert_chunks([]) == 0
@@ -82,6 +91,25 @@ class TestLanceDBRepository:
         n = repository.update_chunks("/a.md", updated)
         assert n == 1
         assert repository.count() == 1
+
+    def test_reopened_table_supports_insert_and_update(self, config) -> None:
+        db_path = config.resolve(config.database.path)
+        first = LanceDBRepository(db_path, config.database.table_name)
+        first.insert_chunks([
+            _make_chunk("c1", "/a.md", "first", [0.1, 0.2])
+        ])
+
+        reopened = LanceDBRepository(db_path, config.database.table_name)
+        reopened.insert_chunks([
+            _make_chunk("c2", "/b.md", "second", [0.3, 0.4])
+        ])
+        reopened.update_chunks(
+            "/a.md",
+            [_make_chunk("c3", "/a.md", "replacement", [0.5, 0.6])],
+        )
+
+        assert reopened.count() == 2
+        assert reopened.filter_by_metadata(source_file="/a.md")[0]["chunk_id"] == "c3"
 
     def test_search_returns_results(self, repository: LanceDBRepository) -> None:
         chunks = [

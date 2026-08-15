@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from palace.embeddings.manager import FakeEmbedder
-from palace.indexing.chunker import NoteChunker
 from palace.indexing.hash_cache import HashCache
 from palace.indexing.indexer import IncrementalIndexer
 from palace.indexing.repository import LanceDBRepository
@@ -26,6 +25,7 @@ def _make_hit(
     d: date | None = None,
     domain: DocumentDomain = DocumentDomain.JOURNAL,
     tags: list[str] | None = None,
+    keywords: list[str] | None = None,
     word_count: int = 5,
 ) -> RawHit:
     return RawHit(
@@ -36,6 +36,7 @@ def _make_hit(
         date=d,
         domain=domain,
         tags=tags or [],
+        keywords=keywords or [],
         word_count=word_count,
     )
 
@@ -124,6 +125,33 @@ class TestSearchRanker:
         results = ranker.rank(hits)
         assert results[0].metadata["word_count"] == 42
         assert results[0].metadata["domain"] == "journal"
+
+    def test_exact_keyword_match_ranks_above_stronger_semantic_match(self) -> None:
+        ranker = SearchRanker(
+            SearchConfig(
+                minimum_score=0.0,
+                keyword_boost_amount=0.2,
+                deduplicate_by_source=False,
+            )
+        )
+        hits = [
+            _make_hit(
+                chunk_id="semantic",
+                score=0.85,
+                source_file="/semantic.md",
+                keywords=["vector database"],
+            ),
+            _make_hit(
+                chunk_id="exact",
+                score=0.70,
+                source_file="/exact.md",
+                keywords=["hybrid search"],
+            ),
+        ]
+
+        results = ranker.rank(hits, query_keywords=["hybrid search"])
+
+        assert [result.chunk_id for result in results] == ["exact", "semantic"]
 
 
 class TestSemanticSearchEngine:
@@ -223,3 +251,35 @@ class TestSemanticSearchEngine:
     def test_search_invalid_date_string_handled(self, engine: SemanticSearchEngine) -> None:
         results = engine.semantic_search("test", date_from="not-a-date")
         assert isinstance(results, list)
+
+    def test_query_keywords_boost_exact_match(self, config, embedder: FakeEmbedder) -> None:
+        config.search.minimum_score = 0.0
+        config.search.keyword_boost_amount = 0.2
+        config.search.deduplicate_by_source = False
+
+        class StaticRepository:
+            def search(self, **_kwargs):
+                return [
+                    {
+                        "chunk_id": "semantic",
+                        "content": "Conceptually related material",
+                        "_similarity": 0.85,
+                        "source_file": "/semantic.md",
+                        "domain": "notes",
+                        "keywords": ["vector database"],
+                    },
+                    {
+                        "chunk_id": "exact",
+                        "content": "A literal keyword match",
+                        "_similarity": 0.70,
+                        "source_file": "/exact.md",
+                        "domain": "notes",
+                        "keywords": ["hybrid search"],
+                    },
+                ]
+
+        engine = SemanticSearchEngine(config, embedder, StaticRepository())
+
+        results = engine.semantic_search("hybrid search")
+
+        assert [result.chunk_id for result in results] == ["exact", "semantic"]
