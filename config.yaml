@@ -34,7 +34,7 @@ database:
 indexer:
   # Directories to scan for source documents. Each is walked recursively.
   source_dirs:
-    - "data/source_docs/journals"
+    - "data/source_docs"
   # File extensions to index.
   extensions:
     - ".md"
@@ -48,15 +48,17 @@ search:
   # Higher = better recall, slower. LanceDB pre-filters metadata.
   prefilter_top_k: 50
   # Final number of results to return to the caller.
-  default_top_k: 8
+  default_top_k: 10
   # Minimum cosine similarity (0..1) to include a result.
   minimum_score: 0.15
   # Recency weighting: results within `recency_boost_days` get a bonus.
   recency_boost_days: 90
-  recency_boost_amount: 0.15
+  recency_boost_amount: 0.0
+  # Additive score bonus for each exact YAKE keyword shared by query and chunk.
+  keyword_boost_amount: 0.4
   # Duplicate suppression: if two hits come from the same source file,
   # keep only the best-scoring one (unless min_score_diff is exceeded).
-  deduplicate_by_source: true
+  deduplicate_by_source: false
   # Domain preference weights. Optional. Domains not listed get weight 1.0.
   domain_weights:
     journal: 1.1

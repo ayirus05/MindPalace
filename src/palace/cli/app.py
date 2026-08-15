@@ -315,8 +315,8 @@ def search(
     date_from: Annotated[Optional[str], typer.Option("--from")] = None,
     date_to: Annotated[Optional[str], typer.Option("--to")] = None,
     tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t")] = None,
-    top_k: Annotated[int, typer.Option("--top-k", "-k")] = 8,
-    minimum_score: Annotated[float, typer.Option("--min-score")] = 0.15,
+    top_k: Annotated[int, typer.Option("--top-k", "-k")] = None,
+    minimum_score: Annotated[float, typer.Option("--min-score")] = None,
     json_out: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
 ) -> None:
     """Semantic search across journals, notes, and transcripts."""
