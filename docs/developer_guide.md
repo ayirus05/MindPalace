@@ -21,8 +21,8 @@ Every function has type hints on all parameters and return values. The codebase 
 ### Pydantic models
 All domain objects are frozen Pydantic v2 models (`model_config = ConfigDict(frozen=True)`). This prevents accidental mutation of chunks, metadata, and search results as they flow through the pipeline.
 
-### Focused abstractions
-`Embedder` remains a `typing.Protocol` because production and test implementations are both used. Persistence and chunking deliberately use the concrete `LanceDBRepository` and `MarkdownASTChunker` classes.
+### Concrete production components
+Embedding, persistence, and chunking use `OllamaEmbedder`, `LanceDBRepository`, and `MarkdownASTChunker` directly. Test doubles live under `tests/`, outside the production package.
 
 ### Dependency injection
 No global state. Every class receives its dependencies via the constructor:
@@ -89,7 +89,7 @@ The MCP server is a thin adapter: take the tool arguments, call `search`, and se
 
 ## Test strategy
 
-- **FakeEmbedder** — deterministic, no Ollama needed. Produces hash-based vectors with weak lexical similarity. Used by default in tests via `conftest.py` setting `PALACE_EMBEDDER=fake`.
+- **Test-only embedder** — deterministic and defined in `tests/fakes.py`, so unit tests do not require Ollama.
 - **Real LanceDB** — tests use real LanceDB in `tmp_path` directories (via the `repository` fixture). This validates actual DB operations.
 - **Mock HTTP** — `test_embedder.py` uses a `_FakeClient` (subclassing `httpx.Client`) to test retry logic and response parsing without network calls.
 - **`tmp_path` fixtures** — `conftest.py` provides a `tmp_project` fixture that creates the standard directory structure in a temp directory, plus `sample_journal` and `sample_note` fixtures with realistic content.

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from palace.embeddings.manager import FakeEmbedder
 from palace.indexing.hash_cache import HashCache
 from palace.indexing.indexer import IncrementalIndexer
 from palace.indexing.repository import LanceDBRepository
@@ -15,6 +14,7 @@ from palace.models.chunk import DocumentDomain, RawHit
 from palace.search.engine import SemanticSearchEngine
 from palace.search.ranker import SearchRanker
 from palace.models.config import SearchConfig
+from tests.fakes import FakeEmbedder
 
 
 def _make_hit(

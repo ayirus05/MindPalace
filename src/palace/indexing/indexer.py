@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from palace.embeddings.manager import Embedder
+from palace.embedder import OllamaEmbedder
 from palace.indexing.chunker import MarkdownASTChunker
 from palace.indexing.hash_cache import HashCache
 from palace.indexing.repository import LanceDBRepository
@@ -50,7 +50,7 @@ class IncrementalIndexer:
     def __init__(
         self,
         config: PalaceConfig,
-        embedder: Embedder,
+        embedder: OllamaEmbedder,
         repository: LanceDBRepository,
         hash_cache: HashCache | None = None,
     ) -> None:

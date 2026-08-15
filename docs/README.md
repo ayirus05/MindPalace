@@ -53,8 +53,8 @@ A future skills layer will fuse the two: read the structured tier for exact fact
 │  Metadata   │                      │                     │
 │  Extractor  │                      │                     │
 ├─────────────┴──────────────────────┴─────────────────────┤
-│              Embedding Manager (Ollama)                   │
-│          batch · retry · timeout · FakeEmbedder          │
+│                    Ollama Embedder                         │
+│                 batch · retry · timeout                   │
 ├───────────────────────────────────────────────────────────┤
 │           LanceDB Repository (the only DB layer)           │
 │        insert · delete · update · search · vacuum          │
@@ -83,8 +83,7 @@ MindPalace/
 │   ├── models/
 │   │   ├── chunk.py         # Chunk, ChunkMetadata, SearchResult, RawHit, IndexStats
 │   │   └── config.py        # PalaceConfig + nested config models
-│   ├── embeddings/
-│   │   └── manager.py       # Embedder protocol + OllamaEmbedder + FakeEmbedder
+│   ├── embedder.py           # OllamaEmbedder
 │   ├── metadata/
 │   │   └── extractor.py     # date/domain/tag extraction strategies
 │   ├── indexing/
@@ -137,13 +136,7 @@ See `config.yaml` for full documentation of each field.
 ./run_tests.sh
 ```
 
-Tests use a `FakeEmbedder` (deterministic, no Ollama required) and real LanceDB in temporary directories. Coverage target: 90%.
-
-To run without Ollama for smoke testing the CLI:
-```bash
-PALACE_EMBEDDER=fake palace index
-PALACE_EMBEDDER=fake palace search "test query"
-```
+Tests use a test-only deterministic embedder and real LanceDB in temporary directories. Coverage target: 90%.
 
 ## MCP readiness
 

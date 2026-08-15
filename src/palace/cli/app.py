@@ -1,8 +1,7 @@
 """MindPalace Tier 2 command-line interface.
 
-Built with Typer + Rich.  Every command loads :class:`PalaceConfig` and
-wires up the real embedder/repository/indexer (or their test doubles when
-``PALACE_EMBEDDER=fake`` is set — useful for smoke tests without Ollama).
+Built with Typer + Rich. Every command loads :class:`PalaceConfig` and wires
+up the concrete embedder, repository, and indexer.
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
-from palace.embeddings.manager import Embedder, FakeEmbedder, OllamaEmbedder
+from palace.embedder import OllamaEmbedder
 from palace.indexing.indexer import IncrementalIndexer
 from palace.indexing.repository import LanceDBRepository
 from palace.llm.factory import get_llm_provider
@@ -74,13 +73,6 @@ def _find_config() -> Path | None:
         if c.exists():
             return c
     return None
-
-
-def _make_embedder(config: PalaceConfig) -> Embedder:
-    """Inject the right embedder based on env / config."""
-    if os.environ.get("PALACE_EMBEDDER", "").lower() == "fake":
-        return FakeEmbedder()
-    return OllamaEmbedder(config.embedding)
 
 
 def _make_repository(config: PalaceConfig) -> LanceDBRepository:
@@ -187,7 +179,7 @@ def chat(
         api_key=cfg.llm.api_key or os.environ.get("GEMINI_API_KEY"),
         host=cfg.llm.host,
     )
-    embedder = _make_embedder(cfg)
+    embedder = OllamaEmbedder(cfg.embedding)
     repo = _make_repository(cfg)
     vault = FileVaultManager(cfg)
     search_engine = SemanticSearchEngine(cfg, embedder, repo)
@@ -260,19 +252,17 @@ def index(
 ) -> None:
     """Index new and changed source files into the vector store."""
     cfg = _load_config(config_path)
-    embedder = _make_embedder(cfg)
+    embedder = OllamaEmbedder(cfg.embedding)
     repo = _make_repository(cfg)
     indexer = IncrementalIndexer(cfg, embedder, repo)
 
-    if not embedder.health_check() and not isinstance(embedder, FakeEmbedder):
+    if not embedder.health_check():
         console.print(
             Panel(
                 "[red]Ollama is not reachable.[/red]\n"
                 "Start it with [cyan]ollama serve[/cyan] and ensure the "
                 "[cyan]nomic-embed-text[/cyan] model is pulled\n"
-                "([cyan]ollama pull nomic-embed-text[/cyan]).\n\n"
-                "To run without Ollama (for smoke testing), set "
-                "[cyan]PALACE_EMBEDDER=fake[/cyan].",
+                "([cyan]ollama pull nomic-embed-text[/cyan]).",
                 title="Embedding backend unavailable",
                 border_style="red",
             )
@@ -321,7 +311,7 @@ def search(
 ) -> None:
     """Semantic search across journals, notes, and transcripts."""
     cfg = _load_config(config_path)
-    embedder = _make_embedder(cfg)
+    embedder = OllamaEmbedder(cfg.embedding)
     repo = _make_repository(cfg)
     engine = SemanticSearchEngine(cfg, embedder, repo)
 
@@ -404,7 +394,7 @@ def verify(
 ) -> None:
     """Verify the index against the hash cache."""
     cfg = _load_config(config_path)
-    embedder = _make_embedder(cfg)
+    embedder = OllamaEmbedder(cfg.embedding)
     repo = _make_repository(cfg)
     from palace.indexing.hash_cache import HashCache
     cache = HashCache(cfg.resolve(cfg.indexer.hash_cache_path))
@@ -550,7 +540,7 @@ def rebuild(
 ) -> None:
     """Drop the index and rebuild it from scratch."""
     cfg = _load_config(config_path)
-    embedder = _make_embedder(cfg)
+    embedder = OllamaEmbedder(cfg.embedding)
     repo = _make_repository(cfg)
     try:
         repo.vacuum()

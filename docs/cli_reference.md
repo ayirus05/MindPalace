@@ -159,11 +159,3 @@ palace rebuild [--config PATH]
 - Re-indexes every source file.
 
 Use this when the embedding model changed, the index is corrupt, or you want to reclaim disk space.
-
----
-
-## Environment variables
-
-| Variable | Description |
-|---|---|
-| `PALACE_EMBEDDER` | Set to `fake` to use the deterministic test embedder instead of Ollama. Useful for smoke testing without Ollama running. |

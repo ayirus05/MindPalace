@@ -14,7 +14,7 @@ CLI → Search Engine / Indexer → Repository + Embedder → LanceDB / Ollama
                                    Models
 ```
 
-The embedding boundary uses the `Embedder` protocol, while persistence and chunking use the concrete `LanceDBRepository` and `MarkdownASTChunker` classes. LanceDB code is confined to `repository.py`; Ollama HTTP code is confined to `OllamaEmbedder`.
+Embedding, persistence, and chunking use the concrete `OllamaEmbedder`, `LanceDBRepository`, and `MarkdownASTChunker` classes. LanceDB code is confined to `repository.py`; Ollama HTTP code is confined to `embedder.py`.
 
 The system integrates with the existing Tier 1 (structured markdown palace) without modifying it. Tier 1 and Tier 2 share the same MindPalace directory but are independent: Tier 1 is markdown files read directly by Claude; Tier 2 is a vector index queried via the CLI or a future MCP server. The planned skills layer will fuse the two by reading Tier 1 deterministically and calling Tier 2's `search()` for unstructured recall.
 
@@ -25,8 +25,7 @@ src/palace/
 ├── models/
 │   ├── chunk.py         — Chunk, ChunkMetadata, SearchResult, RawHit, IndexStats, DocumentDomain
 │   └── config.py        — PalaceConfig + EmbeddingConfig, ChunkerConfig, DatabaseConfig, IndexerConfig, SearchConfig, LoggingConfig
-├── embeddings/
-│   └── manager.py       — Embedder protocol, OllamaEmbedder (httpx + tenacity), FakeEmbedder
+├── embedder.py          — OllamaEmbedder (httpx + tenacity)
 ├── metadata/
 │   └── extractor.py     — MetadataExtractor, extract_date, infer_domain, extract_tags
 ├── indexing/
@@ -49,8 +48,8 @@ docs/                     — 7 documentation files
 
 ## Implementation decisions
 
-### 1. Focused abstraction boundaries
-`Embedder` remains a `typing.Protocol` because it has production and test implementations. Persistence and chunking use `LanceDBRepository` and `MarkdownASTChunker` directly.
+### 1. Concrete production components
+Embedding, persistence, and chunking use `OllamaEmbedder`, `LanceDBRepository`, and `MarkdownASTChunker` directly. Test doubles are kept outside `src/`.
 
 ### 2. Frozen Pydantic models
 All domain objects use `ConfigDict(frozen=True)`. Chunks, metadata, and search results are immutable as they flow through the pipeline. The indexer creates new `Chunk` instances with embeddings attached rather than mutating existing ones.
@@ -67,8 +66,8 @@ Domain, date range, and tags are pushed down to LanceDB as a SQL WHERE clause be
 ### 6. Multi-signal ranking
 The ranker combines: semantic similarity (base), recency boost (linear decay within N days), domain weight (per-domain multiplier), and duplicate suppression (one result per source file). Results below `minimum_score` are dropped. This surfaces the most useful results rather than only the highest cosine similarity.
 
-### 7. FakeEmbedder for testing
-A deterministic, hash-based embedder produces reproducible vectors without any network calls or model downloads. It creates weak-but-usable lexical similarity (shared words → shared vector dimensions) sufficient for unit testing the pipeline. Set via `PALACE_EMBEDDER=fake` environment variable.
+### 7. Test-only embedder
+A deterministic, hash-based embedder under `tests/` produces reproducible vectors without network calls or model downloads. It creates weak-but-usable lexical similarity for unit testing without shipping test code in production.
 
 ### 8. SQL injection prevention
 All user-provided strings (source files, tags, domains) passed to LanceDB SQL filters are escaped by doubling single quotes. The `delete_chunks`, `_build_filter_sql`, and `filter_by_metadata` methods all use `_escape_sql_string()`.
@@ -117,7 +116,7 @@ All user-provided strings (source files, tags, domains) passed to LanceDB SQL fi
 
 ## Known limitations
 
-1. **Ollama dependency** — The production embedder requires a running Ollama instance with `nomic-embed-text` pulled. The `FakeEmbedder` is available for testing but produces poor search quality.
+1. **Ollama dependency** — The production embedder requires a running Ollama instance with `nomic-embed-text` pulled.
 
 2. **LanceDB SQL dialect** — The filter SQL uses LanceDB's specific SQL dialect. Migrating to a different vector store would require rewriting the filter builder in `repository.py`.
 

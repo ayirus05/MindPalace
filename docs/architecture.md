@@ -8,7 +8,7 @@ MindPalace Tier 2 is a local-first semantic memory engine. It indexes unstructur
 
 **Layered architecture with one-directional dependencies.** Models depend on nothing. Metadata extraction depends on models. The embedder depends on models. The chunker depends on models + metadata. The repository depends on models + LanceDB. The indexer depends on all of the above. The search engine depends on the embedder + repository + ranker. The CLI depends on everything. No layer reaches downward past its own scope.
 
-**Purposeful concrete implementations.** Persistence uses `LanceDBRepository`, and chunking uses `MarkdownASTChunker`. The `Embedder` boundary remains a protocol because production and test implementations are both used.
+**Purposeful concrete implementations.** Embedding uses `OllamaEmbedder`, persistence uses `LanceDBRepository`, and chunking uses `MarkdownASTChunker`.
 
 **No raw database code outside the repository.** LanceDB is imported in exactly one file: `repository.py`. If you ever want to swap LanceDB for Qdrant, Pinecone, or pgvector, you replace one file.
 
@@ -79,14 +79,9 @@ Results below `minimum_score` are dropped before ranking. The final list is trun
 
 `PalaceConfig` is a Pydantic model loaded from `config.yaml`. All paths are resolved relative to `project_root` (the directory containing the config file) unless absolute. The config object is passed by injection to every component that needs it — no component reads `config.yaml` directly.
 
-## Embedding abstraction
+## Embedding implementation
 
-The `Embedder` protocol has two implementations:
-
-- **OllamaEmbedder** — production. Uses httpx for HTTP, tenacity for exponential-backoff retries. Batches texts at `batch_size`. Health check probes `/api/tags`. All Ollama HTTP code is confined to this class.
-- **FakeEmbedder** — test double. Deterministic hash-based vectors. No network, no dependencies. Produces weak-but-usable lexical similarity for unit tests.
-
-Set `PALACE_EMBEDDER=fake` in the environment to use the fake embedder from the CLI (useful for smoke testing without Ollama running).
+`OllamaEmbedder` uses httpx for HTTP and tenacity for exponential-backoff retries. It batches texts at `batch_size`, and its health check probes `/api/tags`. All Ollama HTTP code is confined to `embedder.py`. Tests keep their deterministic fake under `tests/`, outside the production package.
 
 ## Scaling considerations
 

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from palace.embeddings.manager import EmbeddingError, FakeEmbedder
+from palace.embedder import EmbeddingError, OllamaEmbedder
 from palace.models.config import EmbeddingConfig
+from tests.fakes import FakeEmbedder
 
 
 class TestFakeEmbedder:
@@ -48,16 +49,12 @@ class TestOllamaEmbedderUnit:
     """Unit tests for OllamaEmbedder using a mock HTTP client."""
 
     def test_model_name(self) -> None:
-        from palace.embeddings.manager import OllamaEmbedder
-
         cfg = EmbeddingConfig(model="nomic-embed-text")
         emb = OllamaEmbedder(cfg, client=_FakeClient())
         assert emb.model_name == "nomic-embed-text"
 
     def test_health_check_ok(self) -> None:
         import httpx
-        from palace.embeddings.manager import OllamaEmbedder
-
         client = _FakeClient(
             responses={
                 "/api/tags": httpx.Response(200, json={"models": []}),
@@ -67,15 +64,11 @@ class TestOllamaEmbedderUnit:
         assert emb.health_check() is True
 
     def test_health_check_connection_error(self) -> None:
-        from palace.embeddings.manager import OllamaEmbedder
-
         emb = OllamaEmbedder(EmbeddingConfig(), client=_FailingClient())
         assert emb.health_check() is False
 
     def test_embed_batch_parses_response(self) -> None:
         import httpx
-        from palace.embeddings.manager import OllamaEmbedder
-
         client = _FakeClient(
             responses={
                 "/api/embed": httpx.Response(
@@ -92,8 +85,6 @@ class TestOllamaEmbedderUnit:
 
     def test_embed_batch_chunked(self) -> None:
         import httpx
-        from palace.embeddings.manager import OllamaEmbedder
-
         # batch_size=1 forces one request per text.
         client = _FakeClient(
             responses={
@@ -109,8 +100,6 @@ class TestOllamaEmbedderUnit:
 
     def test_embed_batch_mismatched_count(self) -> None:
         import httpx
-        from palace.embeddings.manager import OllamaEmbedder
-
         client = _FakeClient(
             responses={
                 "/api/embed": httpx.Response(200, json={"embeddings": [[0.1]]}),
@@ -122,8 +111,6 @@ class TestOllamaEmbedderUnit:
 
     def test_embed_batch_retries_then_succeeds(self) -> None:
         import httpx
-        from palace.embeddings.manager import OllamaEmbedder
-
         client = _FakeClient(
             responses={
                 "/api/embed": [
@@ -141,8 +128,6 @@ class TestOllamaEmbedderUnit:
 
     def test_embed_batch_retries_exhausted_raises(self) -> None:
         import httpx
-        from palace.embeddings.manager import OllamaEmbedder
-
         client = _FailingClient()
         emb = OllamaEmbedder(
             EmbeddingConfig(max_retries=2, retry_initial_wait_seconds=0.01, retry_max_wait_seconds=0.02),

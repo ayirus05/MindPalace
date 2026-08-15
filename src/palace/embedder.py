@@ -1,14 +1,8 @@
-"""Embedding abstraction.
-
-The :class:`Embedder` protocol decouples the rest of the codebase from the
-concrete embedding backend.  :class:`OllamaEmbedder` is the production
-implementation; a :class:`FakeEmbedder` is provided for tests.
-"""
+"""Ollama-backed text embedding."""
 
 from __future__ import annotations
 
 import logging
-from typing import Protocol, runtime_checkable
 
 import httpx
 from tenacity import (
@@ -20,45 +14,14 @@ from tenacity import (
     before_sleep_log,
 )
 
-from palace.models.chunk import Chunk
 from palace.models.config import EmbeddingConfig
 
 
-logger = logging.getLogger("palace.embeddings")
+logger = logging.getLogger("palace.embedder")
 
 
 class EmbeddingError(RuntimeError):
     """Raised when embedding generation permanently fails."""
-
-
-@runtime_checkable
-class Embedder(Protocol):
-    """A minimal embedding backend contract.
-
-    Implementations must return a vector with the same dimensionality for
-    every input and be safe to call concurrently.
-    """
-
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of texts, preserving order."""
-        ...
-
-    def embed_one(self, text: str) -> list[float]:
-        """Embed a single text."""
-        ...
-
-    def health_check(self) -> bool:
-        """Return True if the backend is reachable and ready."""
-        ...
-
-    @property
-    def dimensionality(self) -> int:
-        """Vector dimensionality of the configured model."""
-        ...
-
-    @property
-    def model_name(self) -> str:
-        ...
 
 
 class OllamaEmbedder:
@@ -156,48 +119,3 @@ class OllamaEmbedder:
                 f"Ollama returned {len(embeddings or [])} embeddings for {len(batch)} inputs"
             )
         return [list(map(float, vec)) for vec in embeddings]
-
-
-class FakeEmbedder:
-    """Deterministic, dependency-free embedder for tests.
-
-    Produces a reproducible vector from text via hashing.  Not neural, but
-    stable: the same text always maps to the same vector, and similar texts
-    overlap in set-bits, providing weak-but-usable similarity for unit tests.
-    """
-
-    def __init__(self, dim: int = 64) -> None:
-        self._dim = dim
-
-    @property
-    def model_name(self) -> str:
-        return "fake"
-
-    @property
-    def dimensionality(self) -> int:
-        return self._dim
-
-    def embed_one(self, text: str) -> list[float]:
-        return self.embed_batch([text])[0]
-
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        import hashlib
-
-        out: list[list[float]] = []
-        for text in texts:
-            # Token-bag over hashed words gives a crude lexical feature vector.
-            vec = [0.0] * self._dim
-            for word in text.lower().split():
-                h = int(hashlib.md5(word.encode("utf-8")).hexdigest(), 16)
-                vec[h % self._dim] += 1.0
-            norm = sum(v * v for v in vec) ** 0.5
-            out.append([v / norm if norm else v for v in vec] if norm else vec)
-        return out
-
-    def health_check(self) -> bool:
-        return True
-
-
-def chunk_to_texts(chunks: list[Chunk]) -> list[str]:
-    """Transform chunks into the text strings passed to the embedder."""
-    return [c.content for c in chunks]

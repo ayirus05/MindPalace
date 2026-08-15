@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from palace.embeddings.manager import Embedder
+from palace.embedder import OllamaEmbedder
 from palace.indexing.repository import LanceDBRepository
 from palace.metadata.keywords import extract_keywords
 from palace.models.chunk import DocumentDomain, RawHit, SearchResult
@@ -37,7 +37,7 @@ class SemanticSearchEngine:
     """High-level semantic search over the local LanceDB index.
 
     Responsibilities:
-      * Embed the query via the configured :class:`Embedder`.
+      * Embed the query via the configured :class:`OllamaEmbedder`.
       * Pre-filter on metadata (domain / date / tags) where possible.
       * Delegate ranking to :class:`SearchRanker`.
       * Return clean :class:`SearchResult` objects.
@@ -48,7 +48,7 @@ class SemanticSearchEngine:
     def __init__(
         self,
         config: PalaceConfig,
-        embedder: Embedder,
+        embedder: OllamaEmbedder,
         repository: LanceDBRepository,
         ranker: SearchRanker | None = None,
     ) -> None:

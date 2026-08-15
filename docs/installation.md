@@ -84,18 +84,6 @@ palace index
 palace search "energy and sleep patterns"
 ```
 
-## Running without Ollama (smoke testing)
-
-If Ollama isn't available but you want to test the pipeline:
-
-```bash
-export PALACE_EMBEDDER=fake
-palace index
-palace search "test query"
-```
-
-This uses a deterministic hash-based embedder that produces weak but usable similarity for testing. No data leaves your machine.
-
 ## Troubleshooting
 
 See [troubleshooting.md](troubleshooting.md) for common issues.

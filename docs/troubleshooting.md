@@ -22,12 +22,6 @@ embedding:
   host: "http://your-host:11434"
 ```
 
-**Workaround for testing without Ollama:**
-```bash
-export PALACE_EMBEDDER=fake
-palace index
-```
-
 ---
 
 ## `palace doctor` shows "model nomic-embed-text not pulled"
@@ -73,7 +67,7 @@ This will show whether each source directory exists.
 
 ## `palace search` results are irrelevant
 
-1. **Check your embedding model:** Results depend on `nomic-embed-text` quality. Using `PALACE_EMBEDDER=fake` produces poor results — only use that for smoke testing.
+1. **Check your embedding model:** Results depend on `nomic-embed-text` quality.
 2. **Adjust domain weights:** In `config.yaml`, under `search.domain_weights`, boost domains you care about.
 3. **Tune minimum_score:** Lower it for more recall, raise it for more precision.
 4. **Increase prefilter_top_k:** Higher values give the ranker more candidates to work with.

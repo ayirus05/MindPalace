@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from palace.embeddings.manager import FakeEmbedder
 from palace.indexing.hash_cache import HashCache
 from palace.indexing.indexer import IncrementalIndexer
 from palace.indexing.repository import LanceDBRepository
+from tests.fakes import FakeEmbedder
 
 
 @pytest.fixture

@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
 
-# Force the FakeEmbedder for all tests unless explicitly overridden.
-os.environ.setdefault("PALACE_EMBEDDER", "fake")
-
-from palace.embeddings.manager import FakeEmbedder
 from palace.indexing.hash_cache import HashCache
 from palace.indexing.repository import LanceDBRepository
 from palace.models.config import PalaceConfig
+from tests.fakes import FakeEmbedder
 
 
 @pytest.fixture
