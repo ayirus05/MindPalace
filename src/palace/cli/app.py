@@ -325,7 +325,7 @@ def search(
     repo = _make_repository(cfg)
     engine = SemanticSearchEngine(cfg, embedder, repo)
 
-    outcome = engine.search_with_diagnostics(
+    outcome = engine.search(
         query=query,
         domain=domain,
         date_from=date_from,

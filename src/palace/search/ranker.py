@@ -38,10 +38,18 @@ class SearchRanker:
         hits: list[RawHit],
         as_of: datetime | None = None,
         query_keywords: list[str] | None = None,
+        top_k: int | None = None,
+        minimum_score: float | None = None,
     ) -> list[SearchResult]:
         if not hits:
             return []
         now = as_of or datetime.utcnow()
+        result_limit = top_k if top_k is not None else self._config.default_top_k
+        score_threshold = (
+            minimum_score
+            if minimum_score is not None
+            else self._config.minimum_score
+        )
         normalized_query_keywords = {
             keyword.casefold().strip() for keyword in query_keywords or [] if keyword.strip()
         }
@@ -65,7 +73,7 @@ class SearchRanker:
             # Domain weight.
             domain_weight = self._config.domain_weights.get(hit.domain.value, 1.0)
             score *= domain_weight
-            if score >= self._config.minimum_score:
+            if score >= score_threshold:
                 scored.append((score, hit))
 
         scored.sort(key=lambda pair: pair[0], reverse=True)
@@ -73,7 +81,7 @@ class SearchRanker:
         if self._config.deduplicate_by_source:
             scored = self._deduplicate(scored)
 
-        top = scored[: self._config.default_top_k]
+        top = scored[:result_limit]
         return [
             SearchResult(
                 content=h.content,

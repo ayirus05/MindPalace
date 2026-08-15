@@ -10,18 +10,19 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from palace.models.chunk import SearchResult
+from palace.search.engine import SearchOutcome
 from palace.vault.manager import VaultManager
 
 
 class ArchivalSearchEngine(Protocol):
     """Minimal search contract required by the archival-memory tool."""
 
-    def semantic_search(
+    def search(
         self,
         query: str,
         domain: str | None = None,
-    ) -> list[SearchResult]:
-        """Return ranked archival-memory results."""
+    ) -> SearchOutcome:
+        """Return ranked archival-memory results and diagnostics."""
         ...
 
 
@@ -80,7 +81,7 @@ def search_archival_memory(
     omitted from the LLM tool schema.
     """
     engine = search_engine or _require_search_engine()
-    results = engine.semantic_search(query=query, domain=domain)
+    results = engine.search(query=query, domain=domain).results
     return [_serialize_search_result(result) for result in results]
 
 

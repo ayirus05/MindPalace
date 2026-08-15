@@ -53,7 +53,7 @@ LanceDB is imported in exactly one file. The indexer and search engine use `Lanc
 
 ## Adding a search filter
 
-1. Add the parameter to `SemanticSearchEngine.semantic_search()`.
+1. Add the parameter to `SemanticSearchEngine.search()`.
 2. Pass it to `repository.search()` and add a clause in `_build_filter_sql()`.
 3. Test it in `tests/test_search.py`.
 
@@ -73,7 +73,7 @@ from palace.search.engine import SemanticSearchEngine
 engine = SemanticSearchEngine(config, embedder, repository)
 
 # This is the method an MCP tool would call:
-results = engine.semantic_search(
+outcome = engine.search(
     query="energy fatigue last month",
     domain="journal",
     date_from="2026-04-01",
@@ -82,10 +82,10 @@ results = engine.semantic_search(
     top_k=8,
     minimum_score=0.15,
 )
-# results: list[SearchResult] — each has .content, .score, .source_file, .date, .domain, .tags
+# outcome.results: list[SearchResult] — each has .content, .score, .source_file, .date, .domain, .tags
 ```
 
-The MCP server is a thin adapter: take the tool arguments, call `semantic_search`, serialize the `SearchResult` list to the MCP response format. No engine changes required.
+The MCP server is a thin adapter: take the tool arguments, call `search`, and serialize `outcome.results` to the MCP response format. No engine changes required.
 
 ## Test strategy
 

@@ -119,6 +119,23 @@ class TestSearchRanker:
         results = ranker.rank(hits)
         assert len(results) == 2
 
+    def test_per_call_limits_override_config(self) -> None:
+        ranker = SearchRanker(
+            SearchConfig(
+                minimum_score=0.0,
+                default_top_k=5,
+                deduplicate_by_source=False,
+            )
+        )
+        hits = [
+            _make_hit(chunk_id="low", score=0.4, source_file="/low.md"),
+            _make_hit(chunk_id="high", score=0.8, source_file="/high.md"),
+        ]
+
+        results = ranker.rank(hits, top_k=1, minimum_score=0.5)
+
+        assert [result.chunk_id for result in results] == ["high"]
+
     def test_result_has_metadata(self) -> None:
         ranker = SearchRanker(SearchConfig(minimum_score=0.0))
         hits = [_make_hit(chunk_id="c1", score=0.8, word_count=42, domain=DocumentDomain.JOURNAL)]
@@ -180,7 +197,7 @@ class TestSemanticSearchEngine:
         return engine
 
     def test_search_returns_results(self, populated_engine: SemanticSearchEngine) -> None:
-        results = populated_engine.semantic_search("energy fatigue low")
+        results = populated_engine.search("energy fatigue low").results
         assert len(results) > 0
         assert isinstance(results[0].content, str)
         assert results[0].score >= 0
@@ -189,20 +206,20 @@ class TestSemanticSearchEngine:
         self, populated_engine: SemanticSearchEngine
     ) -> None:
         # restrict to a domain that has no entries -> empty
-        results = populated_engine.semantic_search("test", domain="transcript")
+        results = populated_engine.search("test", domain="transcript").results
         # FakeEmbedder token overlap may still match; just check it runs.
         assert isinstance(results, list)
 
     def test_search_respects_top_k_override(
         self, populated_engine: SemanticSearchEngine
     ) -> None:
-        results = populated_engine.semantic_search("energy", top_k=1)
+        results = populated_engine.search("energy", top_k=1).results
         assert len(results) <= 1
 
     def test_search_with_minimum_score(
         self, populated_engine: SemanticSearchEngine
     ) -> None:
-        results = populated_engine.semantic_search("energy", minimum_score=0.99)
+        results = populated_engine.search("energy", minimum_score=0.99).results
         # With such a high threshold, we expect few or no results.
         assert all(r.score >= 0.99 for r in results) or len(results) == 0
 
@@ -210,46 +227,46 @@ class TestSemanticSearchEngine:
         self, populated_engine: SemanticSearchEngine
     ) -> None:
         from datetime import date
-        results = populated_engine.semantic_search(
+        results = populated_engine.search(
             "energy", date_from="2026-04-15", date_to="2026-04-22"
-        )
+        ).results
         for r in results:
             if r.date is not None:
                 assert date(2026, 4, 15) <= r.date <= date(2026, 4, 22)
 
     def test_search_with_tags(self, populated_engine: SemanticSearchEngine) -> None:
-        results = populated_engine.semantic_search("energy", tags=["health"])
+        results = populated_engine.search("energy", tags=["health"]).results
         # The sample journal has front-matter tags [health, energy]
         for r in results:
             # If tags filter applied, results must have the tag.
             if r.tags:
                 assert "health" in r.tags
 
-    def test_search_with_diagnostics(
+    def test_search_returns_diagnostics(
         self, populated_engine: SemanticSearchEngine
     ) -> None:
-        outcome = populated_engine.search_with_diagnostics("energy")
+        outcome = populated_engine.search("energy")
         assert outcome.duration_ms > 0
         assert isinstance(outcome.candidate_count, int)
         assert isinstance(outcome.results, list)
 
     def test_search_empty_index(self, engine: SemanticSearchEngine) -> None:
-        results = engine.semantic_search("anything")
+        results = engine.search("anything").results
         assert results == []
 
     def test_search_coerces_string_domain(self, engine: SemanticSearchEngine) -> None:
         # Passing domain as string coercion shouldn't crash.
-        results = engine.semantic_search("test", domain="journal")
+        results = engine.search("test", domain="journal").results
         assert isinstance(results, list)
 
     def test_search_coerces_string_dates(self, engine: SemanticSearchEngine) -> None:
-        results = engine.semantic_search(
+        results = engine.search(
             "test", date_from="2026-01-01", date_to="2026-12-31"
-        )
+        ).results
         assert isinstance(results, list)
 
     def test_search_invalid_date_string_handled(self, engine: SemanticSearchEngine) -> None:
-        results = engine.semantic_search("test", date_from="not-a-date")
+        results = engine.search("test", date_from="not-a-date").results
         assert isinstance(results, list)
 
     def test_query_keywords_boost_exact_match(self, config, embedder: FakeEmbedder) -> None:
@@ -280,6 +297,35 @@ class TestSemanticSearchEngine:
 
         engine = SemanticSearchEngine(config, embedder, StaticRepository())
 
-        results = engine.semantic_search("hybrid search")
+        results = engine.search("hybrid search").results
 
         assert [result.chunk_id for result in results] == ["exact", "semantic"]
+
+    def test_search_reuses_injected_ranker_with_overrides(
+        self, config, embedder: FakeEmbedder
+    ) -> None:
+        class EmptyRepository:
+            def search(self, **_kwargs):
+                return []
+
+        ranker = SearchRanker(config.search)
+        calls: list[dict] = []
+
+        def record_rank(hits, **kwargs):
+            calls.append({"hits": hits, **kwargs})
+            return []
+
+        ranker.rank = record_rank  # type: ignore[method-assign]
+        engine = SemanticSearchEngine(config, embedder, EmptyRepository(), ranker)
+
+        outcome = engine.search("query", top_k=3, minimum_score=0.4)
+
+        assert outcome.results == []
+        assert calls == [
+            {
+                "hits": [],
+                "query_keywords": ["query"],
+                "top_k": 3,
+                "minimum_score": 0.4,
+            }
+        ]

@@ -57,42 +57,7 @@ class SemanticSearchEngine:
         self._repository = repository
         self._ranker = ranker or SearchRanker(config.search)
 
-    def semantic_search(
-        self,
-        query: str,
-        domain: str | DocumentDomain | None = None,
-        date_from: date | str | None = None,
-        date_to: date | str | None = None,
-        tags: list[str] | None = None,
-        top_k: int | None = None,
-        minimum_score: float | None = None,
-    ) -> list[SearchResult]:
-        """Search the index, returning ranked results.
-
-        Args:
-            query: Natural language query.
-            domain: Restrict to a single domain (string or enum).
-            date_from: Earliest entry date (inclusive).  Accepts ``date`` or ISO string.
-            date_to: Latest entry date (inclusive).
-            tags: Only return chunks containing all these tags.
-            top_k: Override the default number of results.
-            minimum_score: Override the default minimum similarity.
-
-        Returns:
-            A list of :class:`SearchResult`, best first.
-        """
-        outcome = self.search_with_diagnostics(
-            query=query,
-            domain=domain,
-            date_from=date_from,
-            date_to=date_to,
-            tags=tags,
-            top_k=top_k,
-            minimum_score=minimum_score,
-        )
-        return outcome.results
-
-    def search_with_diagnostics(
+    def search(
         self,
         query: str,
         domain: str | DocumentDomain | None = None,
@@ -102,7 +67,7 @@ class SemanticSearchEngine:
         top_k: int | None = None,
         minimum_score: float | None = None,
     ) -> SearchOutcome:
-        """Like :meth:`semantic_search` but also returns timing + candidate count."""
+        """Search the index and return results with timing diagnostics."""
         t0 = time.monotonic()
 
         # Coerce types.
@@ -130,18 +95,12 @@ class SemanticSearchEngine:
         # Convert to RawHit for the ranker.
         hits = [_row_to_hit(r) for r in raw]
 
-        # Apply overrides on a copy of the ranker config.
-        ranker = self._ranker
-        if top_k is not None or minimum_score is not None:
-            new_search_cfg = self._config.search.model_copy(
-                update={
-                    "default_top_k": top_k if top_k is not None else self._config.search.default_top_k,
-                    "minimum_score": minimum_score if minimum_score is not None else self._config.search.minimum_score,
-                }
-            )
-            ranker = SearchRanker(new_search_cfg)
-
-        results = ranker.rank(hits, query_keywords=query_keywords)
+        results = self._ranker.rank(
+            hits,
+            query_keywords=query_keywords,
+            top_k=top_k,
+            minimum_score=minimum_score,
+        )
         duration_ms = (time.monotonic() - t0) * 1000
         logger.info(
             "Search '%s' -> %d results in %.1fms (candidates=%d)",

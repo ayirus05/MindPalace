@@ -16,7 +16,7 @@ CLI → Search Engine / Indexer → Repository + Embedder → LanceDB / Ollama
 
 The embedding boundary uses the `Embedder` protocol, while persistence and chunking use the concrete `LanceDBRepository` and `MarkdownASTChunker` classes. LanceDB code is confined to `repository.py`; Ollama HTTP code is confined to `OllamaEmbedder`.
 
-The system integrates with the existing Tier 1 (structured markdown palace) without modifying it. Tier 1 and Tier 2 share the same MindPalace directory but are independent: Tier 1 is markdown files read directly by Claude; Tier 2 is a vector index queried via the CLI or a future MCP server. The planned skills layer will fuse the two by reading Tier 1 deterministically and calling Tier 2's `semantic_search()` for unstructured recall.
+The system integrates with the existing Tier 1 (structured markdown palace) without modifying it. Tier 1 and Tier 2 share the same MindPalace directory but are independent: Tier 1 is markdown files read directly by Claude; Tier 2 is a vector index queried via the CLI or a future MCP server. The planned skills layer will fuse the two by reading Tier 1 deterministically and calling Tier 2's `search()` for unstructured recall.
 
 ## Package structure
 
@@ -74,7 +74,7 @@ A deterministic, hash-based embedder produces reproducible vectors without any n
 All user-provided strings (source files, tags, domains) passed to LanceDB SQL filters are escaped by doubling single quotes. The `delete_chunks`, `_build_filter_sql`, and `filter_by_metadata` methods all use `_escape_sql_string()`.
 
 ### 9. MCP-ready search API
-`SemanticSearchEngine.semantic_search()` takes plain Python types (strings, dates, lists) and returns plain Pydantic models (`list[SearchResult]`). An MCP server wrapping this is a thin adapter — it calls the method and serializes results. No engine changes are needed.
+`SemanticSearchEngine.search()` takes plain Python types (strings, dates, lists) and returns a `SearchOutcome` containing Pydantic search results and diagnostics. An MCP server wrapping this is a thin adapter — it calls the method and serializes `outcome.results`. No engine changes are needed.
 
 ### 10. Configuration via injection
 `PalaceConfig` is loaded once (from `config.yaml`) and passed to every component via constructor injection. No component reads the config file directly. Paths are resolved relative to `project_root`. This makes testing trivial — construct a `PalaceConfig.default_for(tmp_path)` and pass it in.
@@ -99,7 +99,7 @@ All user-provided strings (source files, tags, domains) passed to LanceDB SQL fi
 
 ## Future improvements
 
-1. **MCP server** — Wrap `SemanticSearchEngine.semantic_search()` in an MCP tool. The interface is already clean Python; only a thin serialization adapter is needed.
+1. **MCP server** — Wrap `SemanticSearchEngine.search()` in an MCP tool. The interface is already clean Python; only a thin serialization adapter is needed.
 
 2. **Async embedding** — The current embedder is synchronous. For very large initial indexes (10,000+ entries), async httpx with connection pooling would speed up batch embedding.
 

@@ -147,10 +147,10 @@ PALACE_EMBEDDER=fake palace search "test query"
 
 ## MCP readiness
 
-The `SemanticSearchEngine.semantic_search()` method exposes a clean Python interface:
+The `SemanticSearchEngine.search()` method exposes a clean Python interface:
 
 ```python
-engine.semantic_search(
+outcome = engine.search(
     query="energy fatigue last month",
     domain="journal",
     date_from="2026-04-01",
@@ -161,4 +161,4 @@ engine.semantic_search(
 )
 ```
 
-An MCP server wrapping this is a thin adapter — no changes to the engine needed. The engine holds no per-call state and is safe to reuse.
+Results are available on `outcome.results`, alongside timing and candidate-count diagnostics. An MCP server wrapping this is a thin adapter — no changes to the engine needed. The engine holds no per-call state and is safe to reuse.
