@@ -64,7 +64,7 @@ A future skills layer will fuse the two: read the structured tier for exact fact
 └───────────────────────────────────────────────────────────┘
 ```
 
-Key design constraint: LanceDB code lives exclusively in `repository.py`. Everything else talks to the repository through the `ChunkRepository` protocol, making the system testable without a real database and swappable to a different vector store.
+Key design constraint: LanceDB code lives exclusively in `repository.py`. Indexing and search use the concrete `LanceDBRepository` class.
 
 ## Package structure
 

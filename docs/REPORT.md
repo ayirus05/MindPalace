@@ -14,7 +14,7 @@ CLI → Search Engine / Indexer → Repository + Embedder → LanceDB / Ollama
                                    Models
 ```
 
-External service boundaries use protocols (`Embedder` and `ChunkRepository`), while all chunking uses the concrete `MarkdownASTChunker`. LanceDB code is confined to a single file (`repository.py`); Ollama HTTP code is confined to a single class (`OllamaEmbedder`).
+The embedding boundary uses the `Embedder` protocol, while persistence and chunking use the concrete `LanceDBRepository` and `MarkdownASTChunker` classes. LanceDB code is confined to `repository.py`; Ollama HTTP code is confined to `OllamaEmbedder`.
 
 The system integrates with the existing Tier 1 (structured markdown palace) without modifying it. Tier 1 and Tier 2 share the same MindPalace directory but are independent: Tier 1 is markdown files read directly by Claude; Tier 2 is a vector index queried via the CLI or a future MCP server. The planned skills layer will fuse the two by reading Tier 1 deterministically and calling Tier 2's `semantic_search()` for unstructured recall.
 
@@ -33,7 +33,7 @@ src/palace/
 │   ├── chunker.py       — MarkdownASTChunker
 │   ├── hash_cache.py    — HashCache (JSON-backed), FileEntry
 │   ├── indexer.py       — IncrementalIndexer (delta pipeline), IndexResult
-│   └── repository.py    — ChunkRepository protocol, LanceDBRepository, _escape_sql_string
+│   └── repository.py    — LanceDBRepository, _escape_sql_string
 ├── search/
 │   ├── engine.py        — SemanticSearchEngine (public API), SearchOutcome
 │   └── ranker.py        — SearchRanker (recency, domain, dedup, threshold)
@@ -50,7 +50,7 @@ docs/                     — 7 documentation files
 ## Implementation decisions
 
 ### 1. Focused abstraction boundaries
-`Embedder` and `ChunkRepository` are `typing.Protocol` classes because they have external implementations and test doubles. Chunking uses the concrete `MarkdownASTChunker` directly.
+`Embedder` remains a `typing.Protocol` because it has production and test implementations. Persistence and chunking use `LanceDBRepository` and `MarkdownASTChunker` directly.
 
 ### 2. Frozen Pydantic models
 All domain objects use `ConfigDict(frozen=True)`. Chunks, metadata, and search results are immutable as they flow through the pipeline. The indexer creates new `Chunk` instances with embeddings attached rather than mutating existing ones.

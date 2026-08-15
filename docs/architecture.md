@@ -8,7 +8,7 @@ MindPalace Tier 2 is a local-first semantic memory engine. It indexes unstructur
 
 **Layered architecture with one-directional dependencies.** Models depend on nothing. Metadata extraction depends on models. The embedder depends on models. The chunker depends on models + metadata. The repository depends on models + LanceDB. The indexer depends on all of the above. The search engine depends on the embedder + repository + ranker. The CLI depends on everything. No layer reaches downward past its own scope.
 
-**Protocol-based external boundaries.** `Embedder` and `ChunkRepository` are `Protocol` classes. Production implementations (OllamaEmbedder, LanceDBRepository) and test doubles (FakeEmbedder) both satisfy them. Chunking has one concrete implementation, `MarkdownASTChunker`.
+**Purposeful concrete implementations.** Persistence uses `LanceDBRepository`, and chunking uses `MarkdownASTChunker`. The `Embedder` boundary remains a protocol because production and test implementations are both used.
 
 **No raw database code outside the repository.** LanceDB is imported in exactly one file: `repository.py`. If you ever want to swap LanceDB for Qdrant, Pinecone, or pgvector, you replace one file.
 

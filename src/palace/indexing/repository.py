@@ -1,9 +1,8 @@
 """LanceDB repository layer.
 
 This module is the *only* place in the codebase that imports ``lancedb`` or
-touches the vector database directly.  Everything else goes through the
-:class:`ChunkRepository` protocol, which keeps the indexer and search engine
-testable and swappable.
+touches the vector database directly. Everything else uses
+``LanceDBRepository``.
 
 Design notes
 ------------
@@ -19,7 +18,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 import pyarrow as pa
 
@@ -29,59 +28,9 @@ from palace.models.chunk import Chunk, ChunkMetadata, DocumentDomain
 logger = logging.getLogger("palace.repository")
 
 
-# ---- Protocol --------------------------------------------------------------
-
-
-@runtime_checkable
-class ChunkRepository(Protocol):
-    """Persistence abstraction for chunks + vectors."""
-
-    def insert_chunks(self, chunks: list[Chunk]) -> int:
-        ...
-
-    def delete_chunks(self, source_file: str) -> int:
-        ...
-
-    def update_chunks(self, source_file: str, chunks: list[Chunk]) -> int:
-        ...
-
-    def search(
-        self,
-        query_vector: list[float],
-        top_k: int = 50,
-        domain: DocumentDomain | None = None,
-        date_from: date | None = None,
-        date_to: date | None = None,
-        tags: list[str] | None = None,
-    ) -> list[dict[str, Any]]:
-        ...
-
-    def filter_by_metadata(self, **filters: Any) -> list[dict[str, Any]]:
-        ...
-
-    def vacuum(self) -> dict[str, Any]:
-        ...
-
-    def statistics(self) -> dict[str, Any]:
-        ...
-
-    def count(self) -> int:
-        ...
-
-
-# ---- Concrete LanceDB implementation --------------------------------------
-
-
 def _escape_sql_string(value: str) -> str:
     """Escape single quotes for LanceDB SQL filters to prevent injection."""
     return value.replace("'", "''")
-
-
-def _to_aware(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    return value
-
 
 class LanceDBRepository:
     """Production repository backed by LanceDB.
@@ -132,7 +81,6 @@ class LanceDBRepository:
         existing = self._db.table_names()
         if self._table_name in existing:
             self._table = self._db.open_table(self._table_name)
-            self._migrate_schema()
             return
         if vector_dim is None:
             raise ValueError("Cannot create LanceDB table without vector dimensionality")
@@ -142,13 +90,6 @@ class LanceDBRepository:
             mode="create",
         )
         logger.debug("LanceDB table '%s' ready", self._table_name)
-
-    def _migrate_schema(self) -> None:
-        """Add fields introduced after an index was originally created."""
-        field_names = set(self._table.schema.names)
-        if "keywords" not in field_names:
-            self._table.add_columns(pa.field("keywords", pa.list_(pa.string())))
-            logger.info("Added keywords column to LanceDB table '%s'", self._table_name)
 
     def _row_to_dict(self, row: dict[str, Any]) -> dict[str, Any]:
         """Normalise a LanceDB row into a plain dict with parsed types."""
@@ -364,4 +305,4 @@ class LanceDBRepository:
         return self._table.count_rows()
 
 
-__all__ = ["ChunkRepository", "LanceDBRepository"]
+__all__ = ["LanceDBRepository"]

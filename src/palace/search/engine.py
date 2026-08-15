@@ -14,7 +14,7 @@ from datetime import date
 from typing import Any
 
 from palace.embeddings.manager import Embedder
-from palace.indexing.repository import ChunkRepository
+from palace.indexing.repository import LanceDBRepository
 from palace.metadata.keywords import extract_keywords
 from palace.models.chunk import DocumentDomain, RawHit, SearchResult
 from palace.models.config import PalaceConfig
@@ -49,7 +49,7 @@ class SemanticSearchEngine:
         self,
         config: PalaceConfig,
         embedder: Embedder,
-        repository: ChunkRepository,
+        repository: LanceDBRepository,
         ranker: SearchRanker | None = None,
     ) -> None:
         self._config = config

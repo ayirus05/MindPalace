@@ -20,7 +20,7 @@ from pathlib import Path
 from palace.embeddings.manager import Embedder
 from palace.indexing.chunker import MarkdownASTChunker
 from palace.indexing.hash_cache import HashCache
-from palace.indexing.repository import ChunkRepository
+from palace.indexing.repository import LanceDBRepository
 from palace.metadata.extractor import MetadataExtractor
 from palace.models.chunk import Chunk
 from palace.models.config import PalaceConfig
@@ -51,7 +51,7 @@ class IncrementalIndexer:
         self,
         config: PalaceConfig,
         embedder: Embedder,
-        repository: ChunkRepository,
+        repository: LanceDBRepository,
         hash_cache: HashCache | None = None,
     ) -> None:
         self._config = config

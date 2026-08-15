@@ -21,8 +21,8 @@ Every function has type hints on all parameters and return values. The codebase 
 ### Pydantic models
 All domain objects are frozen Pydantic v2 models (`model_config = ConfigDict(frozen=True)`). This prevents accidental mutation of chunks, metadata, and search results as they flow through the pipeline.
 
-### Protocols at external boundaries
-`Embedder` and `ChunkRepository` are `typing.Protocol` classes with `@runtime_checkable`. Chunking deliberately uses the concrete `MarkdownASTChunker`, the single implementation for every document domain.
+### Focused abstractions
+`Embedder` remains a `typing.Protocol` because production and test implementations are both used. Persistence and chunking deliberately use the concrete `LanceDBRepository` and `MarkdownASTChunker` classes.
 
 ### Dependency injection
 No global state. Every class receives its dependencies via the constructor:
@@ -35,7 +35,7 @@ This means tests construct components with test doubles directly, no monkeypatch
 Each module gets its own logger: `logging.getLogger("palace.<module>")`. The CLI configures logging centrally via `configure_logging()` which uses Rich's console handler. Loggers never call `logging.basicConfig()` — they propagate to the palace root logger.
 
 ### No raw DB code outside repository.py
-LanceDB is imported in exactly one file. The `ChunkRepository` protocol is the only interface the indexer and search engine use. If you need to add a new DB operation, add it to the protocol and `LanceDBRepository` — don't import `lancedb` elsewhere.
+LanceDB is imported in exactly one file. The indexer and search engine use `LanceDBRepository`; don't import `lancedb` elsewhere.
 
 ## Changing chunking behavior
 

@@ -23,7 +23,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 
 from palace.embeddings.manager import Embedder, FakeEmbedder, OllamaEmbedder
 from palace.indexing.indexer import IncrementalIndexer
-from palace.indexing.repository import ChunkRepository, LanceDBRepository
+from palace.indexing.repository import LanceDBRepository
 from palace.llm.factory import get_llm_provider
 from palace.models.config import PalaceConfig
 from palace.search.engine import SemanticSearchEngine
@@ -83,7 +83,7 @@ def _make_embedder(config: PalaceConfig) -> Embedder:
     return OllamaEmbedder(config.embedding)
 
 
-def _make_repository(config: PalaceConfig) -> ChunkRepository:
+def _make_repository(config: PalaceConfig) -> LanceDBRepository:
     return LanceDBRepository(
         db_path=config.resolve(config.database.path),
         table_name=config.database.table_name,
