@@ -66,12 +66,14 @@ Summarize the user's recent entries.
 
     skill = registry.get_skill("journal-review")
     assert skill is not None
-    assert skill.allowed_tools == ["get_core_fact", "search_archival_memory"]
-    assert skill.allowed_lockers == ["profile"]
+    assert skill.name == "journal-review"
+    assert skill.description == "Review journal entries safely."
     assert skill.instructions.startswith("# Instructions")
     prompt = registry.get_skill_prompt("journal-review")
-    assert "Allowed vault lockers: profile" in prompt
+    assert "Active skill: journal-review" in prompt
+    assert "Description: Review journal entries safely." in prompt
     assert "Summarize the user's recent entries." in prompt
+    assert "Allowed vault lockers" not in prompt
 
 
 def test_registry_never_executes_python_files(tmp_path: Path) -> None:

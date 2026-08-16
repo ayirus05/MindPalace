@@ -7,33 +7,21 @@ storage construction out of the tool layer.
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
 from palace.models.chunk import SearchResult
-from palace.search.engine import SearchOutcome
+from palace.search.engine import SemanticSearchEngine
 from palace.vault.manager import VaultManager
 
 
-class ArchivalSearchEngine(Protocol):
-    """Minimal search contract required by the archival-memory tool."""
-
-    def search(
-        self,
-        query: str,
-        domain: str | None = None,
-    ) -> SearchOutcome:
-        """Return ranked archival-memory results and diagnostics."""
-        ...
-
-
 _vault_manager: VaultManager | None = None
-_search_engine: ArchivalSearchEngine | None = None
+_search_engine: SemanticSearchEngine | None = None
 
 
 def configure_memory_tools(
     *,
     vault_manager: VaultManager,
-    search_engine: ArchivalSearchEngine,
+    search_engine: SemanticSearchEngine,
 ) -> None:
     """Inject the long-lived dependencies used by the LLM-facing functions."""
     global _vault_manager, _search_engine
@@ -73,7 +61,7 @@ def update_core_fact(
 def search_archival_memory(
     query: str,
     domain: str | None = None,
-    search_engine: ArchivalSearchEngine | None = None,
+    search_engine: SemanticSearchEngine | None = None,
 ) -> list[dict[str, Any]]:
     """Search archival memory and return JSON-compatible result payloads.
 
@@ -103,7 +91,7 @@ def _require_vault_manager() -> VaultManager:
     return _vault_manager
 
 
-def _require_search_engine() -> ArchivalSearchEngine:
+def _require_search_engine() -> SemanticSearchEngine:
     if _search_engine is None:
         raise RuntimeError(
             "Memory tools are not configured: inject a search engine with "
@@ -113,7 +101,6 @@ def _require_search_engine() -> ArchivalSearchEngine:
 
 
 __all__ = [
-    "ArchivalSearchEngine",
     "configure_memory_tools",
     "get_core_fact",
     "update_core_fact",

@@ -26,12 +26,10 @@ DEFAULT_SKILLS_DIR = Path("data/skills")
 
 @dataclass(frozen=True)
 class SkillSpec:
-    """Declarative instructions and permissions loaded from a Markdown file."""
+    """Declarative instructions loaded from a Markdown file."""
 
     name: str
     description: str
-    allowed_tools: list[str]
-    allowed_lockers: list[str]
     instructions: str
 
 
@@ -198,19 +196,14 @@ class SkillRegistry:
         return self.skills.get(name)
 
     def get_skill_prompt(self, skill_name: str) -> str:
-        """Format a skill's instructions and enforced access boundaries."""
+        """Format a skill's identity and instructions for the model."""
         skill = self.get_skill(skill_name)
         if skill is None:
             raise KeyError(f"Unknown skill: {skill_name}")
 
-        tools = ", ".join(skill.allowed_tools) or "(none)"
-        lockers = ", ".join(skill.allowed_lockers) or "(none)"
         return (
             f"Active skill: {skill.name}\n"
             f"Description: {skill.description}\n\n"
-            "Security policy (enforced by the tool router):\n"
-            f"- Allowed tools: {tools}\n"
-            f"- Allowed vault lockers: {lockers}\n\n"
             f"Skill instructions:\n{skill.instructions}"
         )
 
@@ -240,24 +233,12 @@ def _parse_markdown_skill(skill_path: Path) -> SkillSpec:
     if not isinstance(description, str) or not description.strip():
         raise ValueError("missing or invalid skill description")
 
-    allowed_tools = _string_list(metadata.get("allowed_tools", []), "allowed_tools")
-    allowed_lockers = _string_list(metadata.get("allowed_lockers", []), "allowed_lockers")
     instructions = "\n".join(lines[closing_index + 1 :]).strip()
     return SkillSpec(
         name=name.strip(),
         description=description.strip(),
-        allowed_tools=allowed_tools,
-        allowed_lockers=allowed_lockers,
         instructions=instructions,
     )
-
-
-def _string_list(value: Any, field_name: str) -> list[str]:
-    """Validate a security-policy list without coercing ambiguous values."""
-    if not isinstance(value, list) or any(
-        not isinstance(item, str) or not item.strip() for item in value
-    ):
-        raise ValueError(f"{field_name} must be a list of non-empty strings")
     return [item.strip() for item in value]
 
 

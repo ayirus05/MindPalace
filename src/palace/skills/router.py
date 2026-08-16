@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import ollama
-
 from palace.llm.provider import BaseLLMProvider, OllamaProvider
 from palace.skills.loader import SkillRegistry, SkillSpec
 
@@ -88,9 +86,6 @@ class MemoryAgent:
             tools=self.registry.get_schemas(),
         )
         assistant_message = response
-        print(f"[MemoryAgent] level=0 response: {assistant_message.content!r}")
-        if assistant_message.tool_calls:
-            print(f"[MemoryAgent] level=0 tool_calls: {assistant_message.tool_calls!r}")
         self.history.append({
             "role": "assistant",
             "content": assistant_message.content,
@@ -113,14 +108,10 @@ class MemoryAgent:
                     arguments = dict(raw_arguments or {})
                 if not function_name:
                     continue
-                policy_error = self._policy_error(function_name, arguments)
-                if policy_error:
-                    result = policy_error
-                else:
-                    tool = self.registry.get_function(function_name)
-                    if tool is None:
-                        raise ValueError(f"Unknown memory tool: {function_name}")
-                    result = tool(**arguments)
+                tool = self.registry.get_function(function_name)
+                if tool is None:
+                    raise ValueError(f"Unknown memory tool: {function_name}")
+                result = tool(**arguments)
                 self.history.append(
                     {
                         "role": "tool",
@@ -134,9 +125,6 @@ class MemoryAgent:
                 tools=self.registry.get_schemas(),
             )
             assistant_message = response
-            print(f"[MemoryAgent] level={iteration_count + 1} response: {assistant_message.content!r}")
-            if assistant_message.tool_calls:
-                print(f"[MemoryAgent] level={iteration_count + 1} tool_calls: {assistant_message.tool_calls!r}")
             self.history.append({
                 "role": "assistant",
                 "content": assistant_message.content,
@@ -158,9 +146,6 @@ class MemoryAgent:
                 messages=self.history,
             )
             assistant_message = response
-            print(f"[MemoryAgent] level=max_iterations response: {assistant_message.content!r}")
-            if assistant_message.tool_calls:
-                print(f"[MemoryAgent] level=max_iterations tool_calls: {assistant_message.tool_calls!r}")
             self.history.append({
                 "role": "assistant",
                 "content": assistant_message.content,
@@ -168,35 +153,6 @@ class MemoryAgent:
             })
 
         return assistant_message.content or ""
-
-    def _policy_error(self, tool_name: str, arguments: dict[str, Any]) -> str | None:
-        """Reject tool calls that exceed the active skill's permissions."""
-        if not self.active_skills:
-            return None
-
-        allowed_tools = {
-            tool
-            for skill in self.active_skills
-            for tool in skill.allowed_tools
-        }
-        if tool_name not in allowed_tools:
-            return (
-                f"Security Exception: Tool '{tool_name}' is not permitted by "
-                "the active skill policy."
-            )
-
-        locker = arguments.get("locker_name")
-        allowed_lockers = {
-            locker_name
-            for skill in self.active_skills
-            for locker_name in skill.allowed_lockers
-        }
-        if locker is not None and locker not in allowed_lockers:
-            return (
-                f"Security Exception: Access to locker '{locker}' is not permitted "
-                "by the active skill policy."
-            )
-        return None
 
 
 __all__ = ["MemoryAgent"]
