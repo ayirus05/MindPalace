@@ -30,7 +30,7 @@ from palace.skills.loader import SkillRegistry
 from palace.skills.memory_tools import configure_memory_tools
 from palace.skills.router import MemoryAgent
 from palace.utils.logging import configure_logging
-from palace.vault.manager import FileVaultManager
+from palace.vault.manager import VaultManager
 
 
 app = typer.Typer(
@@ -109,7 +109,7 @@ def list_vault_lockers(
 ) -> None:
     """List active Core Vault lockers."""
     config = _load_config(config_path)
-    lockers = FileVaultManager(config).list_lockers(locker_type.value)
+    lockers = VaultManager(config).list_lockers(locker_type.value)
 
     if not lockers:
         console.print("[yellow]No active lockers.[/yellow]")
@@ -130,7 +130,7 @@ def read_vault_field(
 ) -> None:
     """Read a field from a Core Vault locker."""
     config = _load_config(config_path)
-    value = FileVaultManager(config).read_field(locker_name, field_key)
+    value = VaultManager(config).read_field(locker_name, field_key)
     console.print(value)
 
 
@@ -143,7 +143,7 @@ def write_vault_field(
 ) -> None:
     """Write a field to a Core Vault locker."""
     config = _load_config(config_path)
-    FileVaultManager(config).write_field(locker_name, field_key, value)
+    VaultManager(config).write_field(locker_name, field_key, value)
     console.print(
         f"[green]Updated[/green] {locker_name}.{field_key}"
     )
@@ -181,7 +181,7 @@ def chat(
     )
     embedder = OllamaEmbedder(cfg.embedding)
     repo = _make_repository(cfg)
-    vault = FileVaultManager(cfg)
+    vault = VaultManager(cfg)
     search_engine = SemanticSearchEngine(cfg, embedder, repo)
     configure_memory_tools(
         vault_manager=vault,

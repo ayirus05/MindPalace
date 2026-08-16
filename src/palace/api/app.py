@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from palace.models.config import PalaceConfig
-from palace.vault.manager import FileVaultManager, VaultManager
+from palace.vault.manager import VaultManager
 
 
 LockerType = Literal["all", "system", "user"]
@@ -33,7 +33,7 @@ def create_app(config: PalaceConfig) -> FastAPI:
     """
     app = FastAPI(title="MindPalace Core Vault API", version="1.0.0")
     app.state.config = config
-    app.state.vault_manager = FileVaultManager(config)
+    app.state.vault_manager = VaultManager(config)
 
     @app.get("/api/lockers", response_model=list[str])
     async def list_lockers(

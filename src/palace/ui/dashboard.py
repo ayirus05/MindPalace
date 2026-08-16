@@ -10,7 +10,7 @@ from typing import Any
 import streamlit as st
 
 from palace.models.config import PalaceConfig
-from palace.vault.manager import FileVaultManager, VaultManager
+from palace.vault.manager import VaultManager
 
 
 def run_dashboard(config: PalaceConfig) -> None:
@@ -19,7 +19,7 @@ def run_dashboard(config: PalaceConfig) -> None:
     st.title("MindPalace Core Vault")
     st.caption("Inspect and edit exact-match memory lockers stored as JSON.")
 
-    manager = FileVaultManager(config)
+    manager = VaultManager(config)
     system_lockers = manager.list_lockers("system")
     user_lockers = manager.list_lockers("user")
 

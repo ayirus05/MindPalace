@@ -9,30 +9,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 from palace.models.config import PalaceConfig
 
 
-@runtime_checkable
-class VaultManager(Protocol):
-    """Storage contract used by Core Vault clients."""
-
-    def read_field(self, locker_name: str, field_key: str) -> Any:
-        """Return a field value, or ``None`` when the locker or field is absent."""
-        ...
-
-    def write_field(self, locker_name: str, field_key: str, value: Any) -> None:
-        """Create or update one field in a locker."""
-        ...
-
-    def list_lockers(self, locker_type: str = "all") -> list[str]:
-        """List locker names in the ``system``, ``user``, or ``all`` scope."""
-        ...
-
-
-class FileVaultManager:
-    """JSON-file implementation of :class:`VaultManager`.
+class VaultManager:
+    """JSON-file implementation of the Core Vault storage API.
 
     System lockers take precedence when the same name exists in both scopes.
     Writes update an existing system locker when present; all new lockers are
@@ -139,4 +122,4 @@ class FileVaultManager:
         return value
 
 
-__all__ = ["VaultManager", "FileVaultManager"]
+__all__ = ["VaultManager"]
