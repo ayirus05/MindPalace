@@ -22,6 +22,7 @@ class DocumentDomain(str, Enum):
     NOTES = "notes"
     TRANSCRIPT = "transcript"
     CONVERSATION = "conversation"
+    TECHNICAL = "technical"
     UNKNOWN = "unknown"
 
     @classmethod
