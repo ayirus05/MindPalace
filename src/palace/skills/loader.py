@@ -17,6 +17,7 @@ from palace.skills.tools import (
     get_core_fact,
     search_archival_memory,
     update_core_fact,
+    append_to_journal,
 )
 
 
@@ -165,7 +166,7 @@ class SkillRegistry:
 
     def register_core_tools(self) -> None:
         """Register MindPalace's built-in memory tools."""
-        for func in (get_core_fact, update_core_fact, search_archival_memory):
+        for func in (get_core_fact, update_core_fact, search_archival_memory, append_to_journal):
             self._register_core_tool(func)
 
     def load_markdown_skills(self, skills_dir: Path = DEFAULT_SKILLS_DIR) -> None:
@@ -239,7 +240,6 @@ def _parse_markdown_skill(skill_path: Path) -> SkillSpec:
         description=description.strip(),
         instructions=instructions,
     )
-    return [item.strip() for item in value]
 
 
 __all__ = ["DEFAULT_SKILLS_DIR", "SkillRegistry", "SkillSpec", "function_to_schema"]
