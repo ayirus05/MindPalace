@@ -7,12 +7,14 @@ storage construction out of the tool layer.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from palace.models.chunk import SearchResult
 from palace.search.engine import SemanticSearchEngine
 from palace.vault.manager import VaultManager
 
+JOURNALS_DIR = Path("data/source_docs/journals")
 
 _vault_manager: VaultManager | None = None
 _search_engine: SemanticSearchEngine | None = None
@@ -28,18 +30,14 @@ def configure_memory_tools(
     _vault_manager = vault_manager
     _search_engine = search_engine
 
+# ---- Core Vault Tools ----
 
 def get_core_fact(
     locker_name: str,
     field: str,
-    vault_manager: VaultManager | None = None,
 ) -> Any:
-    """Read an exact field from a Core Vault locker.
-
-    ``vault_manager`` is an injection hook for a host or test and should be
-    omitted from the LLM tool schema.
-    """
-    manager = vault_manager or _require_vault_manager()
+    """Read an exact field from a Core Vault locker."""
+    manager = _require_vault_manager()
     return manager.read_field(locker_name, field)
 
 
@@ -47,31 +45,44 @@ def update_core_fact(
     locker_name: str,
     field: str,
     value: Any,
-    vault_manager: VaultManager | None = None,
 ) -> None:
-    """Create or update an exact field in a Core Vault locker.
-
-    ``vault_manager`` is an injection hook for a host or test and should be
-    omitted from the LLM tool schema.
-    """
-    manager = vault_manager or _require_vault_manager()
+    """Create or replace one JSON field in a local Core Vault locker."""
+    manager = _require_vault_manager()
     manager.write_field(locker_name, field, value)
+    return {"status": "success", "locker_name": locker_name, "field": field}
 
+# ---- Archival Search Tools ----
 
 def search_archival_memory(
     query: str,
     domain: str | None = None,
-    search_engine: SemanticSearchEngine | None = None,
 ) -> list[dict[str, Any]]:
-    """Search archival memory and return JSON-compatible result payloads.
-
-    ``search_engine`` is an injection hook for a host or test and should be
-    omitted from the LLM tool schema.
-    """
-    engine = search_engine or _require_search_engine()
+    """Search archival memory and return matching chunks."""
+    engine = _require_search_engine()
     results = engine.search(query=query, domain=domain).results
-    return [_serialize_search_result(result) for result in results]
+    return [_serialize_search_result(r) for r in results]
 
+# ---- Journal Tools ----
+
+def append_to_journal(date_str: str, entry: str) -> dict[str, Any]:
+    """Append an entry as a Markdown bullet point in a daily journal file (e.g. YYYY-MM-DD)."""
+    filename = _journal_filename(date_str)
+    path = JOURNALS_DIR / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    prefix = ""
+    if path.is_file() and path.stat().st_size > 0:
+        with path.open("rb") as journal:
+            journal.seek(-1, 2)
+            if journal.read(1) != b"\n":
+                prefix = "\n"
+
+    with path.open("a", encoding="utf-8") as journal:
+        journal.write(f"{prefix}- {entry}\n")
+
+    return {"status": "success", "path": str(path)}
+
+# ---- Helpers ----
 
 def _serialize_search_result(
     result: SearchResult | dict[str, Any],
@@ -81,6 +92,12 @@ def _serialize_search_result(
         return dict(result)
     return result.model_dump(mode="json")
 
+def _journal_filename(date_str: str) -> str:
+    date = date_str.strip()
+    candidate = Path(date)
+    if not date or candidate.is_absolute() or len(candidate.parts) != 1 or candidate.suffix:
+        raise ValueError(f"Invalid journal date format: {date_str!r}")
+    return f"{date}.md"
 
 def _require_vault_manager() -> VaultManager:
     if _vault_manager is None:
@@ -105,4 +122,5 @@ __all__ = [
     "get_core_fact",
     "update_core_fact",
     "search_archival_memory",
+    "append_to_journal",
 ]

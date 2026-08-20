@@ -27,7 +27,7 @@ from palace.llm.factory import get_llm_provider
 from palace.models.config import PalaceConfig
 from palace.search.engine import SemanticSearchEngine
 from palace.skills.loader import SkillRegistry
-from palace.skills.memory_tools import configure_memory_tools
+from palace.skills.tools import configure_memory_tools
 from palace.skills.router import MemoryAgent
 from palace.utils.logging import configure_logging
 from palace.vault.manager import VaultManager
