@@ -32,6 +32,7 @@ def test_registry_registers_core_tools(tmp_path: Path) -> None:
 
     names = {schema["function"]["name"] for schema in registry.get_schemas()}
     assert names == {
+        "append_to_journal",
         "get_core_fact",
         "update_core_fact",
         "search_archival_memory",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 from palace.indexing.chunker import MarkdownASTChunker
@@ -136,3 +137,22 @@ Tailscale connects remote hosts.
         chunks = self.build_chunker().chunk_file(path)
 
         assert [chunk.content for chunk in chunks] == ["Ship it."]
+
+    def test_date_filename_is_treated_as_journal(self) -> None:
+        source_path = Path("imports/2026-08-20.md")
+
+        chunks = self.build_chunker("fixedhash").chunk_text(
+            "# Today\n\nA daily entry mentioning 2025-01-01.", source_path
+        )
+
+        assert chunks[0].metadata.domain == DocumentDomain.JOURNAL
+        assert chunks[0].metadata.date == date(2026, 8, 20)
+
+    def test_journals_folder_is_treated_as_journal(self) -> None:
+        source_path = Path("data/source_docs/journals/notes.md")
+
+        chunks = self.build_chunker("fixedhash").chunk_text(
+            "# Today\n\nAn undated daily entry.", source_path
+        )
+
+        assert chunks[0].metadata.domain == DocumentDomain.JOURNAL

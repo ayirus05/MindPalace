@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import re
+from datetime import date, datetime
 from pathlib import Path
 
 from markdown_it import MarkdownIt
 
 from palace.metadata.extractor import MetadataExtractor
 from palace.metadata.keywords import extract_keywords
-from palace.models.chunk import Chunk, ChunkMetadata
+from palace.models.chunk import Chunk, ChunkMetadata, DocumentDomain
 from palace.models.config import ChunkerConfig
 
 
@@ -43,12 +44,18 @@ class MarkdownASTChunker:
             if self._source_hash_override is not None
             else sha256_file_safe(source_path, text)
         )
+        filename_date = _journal_date_from_filename(source_path)
+        is_journal = _is_journal_path(source_path) or filename_date is not None
         chunks: list[Chunk] = []
         for section in self.chunk_by_headers(text):
             section_text = section["text"]
             domain, d, tags, content_hash, wc, tok = self._extractor.build_metadata(
                 source_path, section_text, source_hash
             )
+            if is_journal:
+                domain = DocumentDomain.JOURNAL
+            if filename_date is not None:
+                d = filename_date
             metadata = ChunkMetadata(
                 source_file=str(source_path),
                 source_file_hash=source_hash,
@@ -135,6 +142,23 @@ class MarkdownASTChunker:
                 }
             )
         return chunks
+
+
+def _journal_date_from_filename(path: Path) -> date | None:
+    """Return the date for an exact ``YYYY-MM-DD.md`` journal filename."""
+    if path.suffix.lower() != ".md" or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}", path.stem
+    ):
+        return None
+    try:
+        return date.fromisoformat(path.stem)
+    except ValueError:
+        return None
+
+
+def _is_journal_path(path: Path) -> bool:
+    """Return whether the source is nested beneath a journal directory."""
+    return any(part.casefold() in {"journal", "journals"} for part in path.parts[:-1])
 
 
 def sha256_file_safe(path: Path, text: str) -> str:

@@ -14,10 +14,10 @@ from typing import Any, Annotated, Literal, Union, get_args, get_origin, get_typ
 import yaml
 
 from palace.skills.tools import (
+    append_to_journal,
     get_core_fact,
     search_archival_memory,
     update_core_fact,
-    append_to_journal,
 )
 
 
@@ -166,7 +166,12 @@ class SkillRegistry:
 
     def register_core_tools(self) -> None:
         """Register MindPalace's built-in memory tools."""
-        for func in (get_core_fact, update_core_fact, search_archival_memory, append_to_journal):
+        for func in (
+            get_core_fact,
+            update_core_fact,
+            search_archival_memory,
+            append_to_journal,
+        ):
             self._register_core_tool(func)
 
     def load_markdown_skills(self, skills_dir: Path = DEFAULT_SKILLS_DIR) -> None:

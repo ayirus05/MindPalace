@@ -60,6 +60,9 @@ class TestInferDomain:
     def test_unknown_path(self) -> None:
         assert infer_domain(Path("/random/file.md")) == DocumentDomain.UNKNOWN
 
+    def test_document_domain_daily_note_alias(self) -> None:
+        assert DocumentDomain.from_string("daily_note") == DocumentDomain.JOURNAL
+
 
 class TestExtractTags:
     def test_yaml_front_matter_tags(self) -> None:

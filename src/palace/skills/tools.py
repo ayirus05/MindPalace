@@ -7,6 +7,8 @@ storage construction out of the tool layer.
 
 from __future__ import annotations
 
+import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -93,11 +95,14 @@ def _serialize_search_result(
     return result.model_dump(mode="json")
 
 def _journal_filename(date_str: str) -> str:
-    date = date_str.strip()
-    candidate = Path(date)
-    if not date or candidate.is_absolute() or len(candidate.parts) != 1 or candidate.suffix:
+    normalized = date_str.strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized):
         raise ValueError(f"Invalid journal date format: {date_str!r}")
-    return f"{date}.md"
+    try:
+        date.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"Invalid journal date format: {date_str!r}") from exc
+    return f"{normalized}.md"
 
 def _require_vault_manager() -> VaultManager:
     if _vault_manager is None:

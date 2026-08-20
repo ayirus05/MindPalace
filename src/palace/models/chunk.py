@@ -30,6 +30,8 @@ class DocumentDomain(str, Enum):
         if value is None:
             return cls.UNKNOWN
         normalized = value.strip().lower()
+        if normalized == "daily_note":
+            return cls.JOURNAL
         try:
             return cls(normalized)
         except ValueError:
