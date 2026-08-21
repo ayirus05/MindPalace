@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import TextContent
 
-from palace.embeddings.manager import OllamaEmbedder
+from palace.embedder import OllamaEmbedder
 from palace.indexing.repository import LanceDBRepository
 from palace.models.config import PalaceConfig
 from palace.search.engine import SemanticSearchEngine
@@ -21,15 +22,18 @@ def _load_config() -> PalaceConfig:
     return PalaceConfig.default_for(Path.cwd())
 
 
-config = _load_config()
-embedder = OllamaEmbedder(config.embedding)
-repository = LanceDBRepository(
-    db_path=config.resolve(config.database.path),
-    table_name=config.database.table_name,
-)
-engine = SemanticSearchEngine(config, embedder, repository)
+@lru_cache(maxsize=1)
+def _get_engine() -> SemanticSearchEngine:
+    """Build the search engine lazily when the first tool call arrives."""
+    config = _load_config()
+    embedder = OllamaEmbedder(config.embedding)
+    repository = LanceDBRepository(
+        db_path=config.resolve(config.database.path),
+        table_name=config.database.table_name,
+    )
+    return SemanticSearchEngine(config, embedder, repository)
 
-mcp = FastMCP("MindPalace")
+mcp = MCPServer("MindPalace")
 
 
 @mcp.tool()
@@ -40,7 +44,7 @@ def search_memory(
     date_to: str | None = None,
 ) -> list[TextContent]:
     """Search semantic memory, optionally filtering by domain and date range."""
-    results = engine.semantic_search(
+    outcome = _get_engine().search(
         query=query,
         domain=domain,
         date_from=date_from,
@@ -48,7 +52,7 @@ def search_memory(
     )
     return [
         TextContent(type="text", text=result.model_dump_json())
-        for result in results
+        for result in outcome.results
     ]
 
 
