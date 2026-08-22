@@ -39,6 +39,17 @@ class StubRegistry:
         return remember
 
 
+class FailingRegistry(StubRegistry):
+    def get_function(self, name: str) -> Any:
+        if name != "remember":
+            return None
+
+        def remember(**kwargs: Any) -> str:
+            raise RuntimeError("storage unavailable")
+
+        return remember
+
+
 def test_agent_uses_injected_registry(monkeypatch: Any) -> None:
     registry = StubRegistry()
     responses = iter(
@@ -79,6 +90,38 @@ def test_agent_uses_injected_registry(monkeypatch: Any) -> None:
         if message.get("role") == "assistant" and message.get("tool_calls")
     )
     Message.model_validate(assistant_history)
+
+
+def test_agent_returns_tool_execution_errors_to_the_model() -> None:
+    registry = FailingRegistry()
+    responses = iter(
+        [
+            SimpleNamespace(
+                content="",
+                tool_calls=[
+                    SimpleNamespace(
+                        function=SimpleNamespace(
+                            name="remember", arguments={"value": "blue"}
+                        )
+                    )
+                ],
+            ),
+            SimpleNamespace(content="Could not store it", tool_calls=[]),
+        ]
+    )
+    provider = SimpleNamespace(chat=lambda **kwargs: next(responses))
+
+    agent = MemoryAgent(
+        registry=registry,  # type: ignore[arg-type]
+        provider=provider,  # type: ignore[arg-type]
+    )
+
+    assert agent.chat("Remember blue") == "Could not store it"
+    assert agent.history[-2] == {
+        "role": "tool",
+        "tool_name": "remember",
+        "content": "Tool execution failed: storage unavailable",
+    }
 
 
 def test_agent_executes_requested_tool_without_policy_gate(

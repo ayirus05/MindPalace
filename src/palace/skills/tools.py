@@ -66,8 +66,10 @@ def search_archival_memory(
 
 # ---- Journal Tools ----
 
-def append_to_journal(date_str: str, entry: str) -> dict[str, Any]:
+def append_to_journal(date_str: str | None, entry: str) -> dict[str, Any]:
     """Append an entry as a Markdown bullet point in a daily journal file (e.g. YYYY-MM-DD)."""
+    if not date_str:
+        date_str = date.today().isoformat()
     filename = _journal_filename(date_str)
     path = JOURNALS_DIR / filename
     path.parent.mkdir(parents=True, exist_ok=True)

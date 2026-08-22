@@ -111,7 +111,10 @@ class MemoryAgent:
                 tool = self.registry.get_function(function_name)
                 if tool is None:
                     raise ValueError(f"Unknown memory tool: {function_name}")
-                result = tool(**arguments)
+                try:
+                    result = tool(**arguments)
+                except Exception as exc:
+                    result = f"Tool execution failed: {exc}"
                 self.history.append(
                     {
                         "role": "tool",
