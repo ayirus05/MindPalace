@@ -188,6 +188,8 @@ def chat(
         search_engine=search_engine,
     )
     registry = SkillRegistry()
+    if not skill_names:
+        skill_names = ["default"]
     current_date = datetime.date.today().isoformat()
     system_prompt = (
         f"The current date is {current_date}. "
