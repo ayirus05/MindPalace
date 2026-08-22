@@ -6,10 +6,10 @@ up the concrete embedder, repository, and indexer.
 
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import sys
-from datetime import date
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Optional
@@ -188,12 +188,18 @@ def chat(
         search_engine=search_engine,
     )
     registry = SkillRegistry()
+    current_date = datetime.date.today().isoformat()
+    system_prompt = (
+        f"The current date is {current_date}. "
+        "Converse normally and ignore tools for basic greetings or small talk."
+    )
     try:
         agent = MemoryAgent(
             model=provider_model,
             registry=registry,
             active_skills=skill_names,
             provider=provider,
+            system_prompt=system_prompt,
         )
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
