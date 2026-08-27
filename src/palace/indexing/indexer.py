@@ -81,7 +81,7 @@ class IncrementalIndexer:
 
     # -- main pipeline --
 
-    def index(self) -> IndexResult:
+    def index(self, force_reindex: bool = False) -> IndexResult:
         """Run a full incremental index pass."""
         self._hash_cache.load()
         result = IndexResult(started_at=datetime.utcnow())
@@ -94,7 +94,7 @@ class IncrementalIndexer:
         seen_files: set[str] = set()
         for path in files:
             try:
-                self._index_one(path, result, seen_files)
+                self._index_one(path, result, seen_files, force_reindex)
             except Exception as exc:
                 msg = f"Failed to index {path}: {exc}"
                 logger.exception(msg)
@@ -118,7 +118,13 @@ class IncrementalIndexer:
         )
         return result
 
-    def _index_one(self, path: Path, result: IndexResult, seen_files: set[str]) -> None:
+    def _index_one(
+            self, 
+            path: Path, 
+            result: IndexResult, 
+            seen_files: set[str],
+            force_reindex: bool = False
+        ) -> None:
         from palace.utils.hashing import hash_file
 
         source_file = str(path)
@@ -131,7 +137,7 @@ class IncrementalIndexer:
             result.errors.append(f"Cannot read {path}: {exc}")
             return
 
-        if self._hash_cache.is_unchanged(source_file, file_hash):
+        if not force_reindex and self._hash_cache.is_unchanged(source_file, file_hash):
             result.skipped += 1
             logger.debug("Skipping unchanged file: %s", source_file)
             return
@@ -173,14 +179,6 @@ class IncrementalIndexer:
         result.chunks_created += len(populated)
 
     # -- maintenance --
-
-    def reindex_all(self) -> IndexResult:
-        """Force re-indexing of every file by clearing the hash cache first."""
-        self._hash_cache.load()
-        for key in list(self._hash_cache.all_keys()):
-            self._hash_cache.remove(key)
-        self._hash_cache.save()
-        return self.index()
 
     def verify(self) -> dict[str, int]:
         """Check repository contents against the hash cache.

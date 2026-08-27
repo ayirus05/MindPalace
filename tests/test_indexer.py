@@ -89,7 +89,7 @@ class TestIncrementalIndexing:
     def test_reindex_all_forces_full(self, indexer: IncrementalIndexer, sample_journal: Path, repository: LanceDBRepository) -> None:
         first = indexer.index()
         assert first.indexed == 1
-        forced = indexer.reindex_all()
+        forced = indexer.index(force_reindex = True)
         assert forced.indexed == 1  # re-indexed despite no changes
         assert forced.skipped == 0
 

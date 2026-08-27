@@ -7,7 +7,7 @@ DOCKER_RUN = docker run --rm --network=host \
 	-v "$(DATA_DIR):/app/data" \
 	$(IMAGE)
 
-.PHONY: chat index index-force search doctor stats \
+.PHONY: chat index reindex search doctor stats \
 	docker-build docker-chat docker-index docker-search \
 	check-query setup clean
 
@@ -29,7 +29,7 @@ chat:
 index:
 	$(PALACE) index --config "$(CONFIG)"
 
-index-force:
+reindex:
 	$(PALACE) index --reindex --config "$(CONFIG)"
 
 search: check-query

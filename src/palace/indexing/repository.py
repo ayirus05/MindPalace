@@ -304,5 +304,13 @@ class LanceDBRepository:
         self._ensure_table()
         return self._table.count_rows()
 
+    # -- reset --
+    
+    def drop(self) -> None:
+        """Completely drop the table to start fresh."""
+        if self._table_name in self._db.table_names():
+            self._db.drop_table(self._table_name)
+        self._table = None
+
 
 __all__ = ["LanceDBRepository"]

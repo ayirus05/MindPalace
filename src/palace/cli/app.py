@@ -287,7 +287,7 @@ def index(
         transient=True,
     ) as progress:
         progress.add_task(description="Indexing files...", total=None)
-        result = indexer.reindex_all() if reindex else indexer.index()
+        result = indexer.index(reindex)
 
     table = Table(title="Index result", show_header=True)
     table.add_column("Metric", style="cyan")
@@ -545,17 +545,26 @@ def inspect(
 @app.command()
 def rebuild(
     config_path: ConfigOption = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Bypass confirmation prompt")] = False,
 ) -> None:
     """Drop the index and rebuild it from scratch."""
+    if not force:
+        typer.confirm(
+            "This will completely destroy the vector index and hash cache. Are you sure?", 
+            abort=True
+        )
+
     cfg = _load_config(config_path)
     embedder = OllamaEmbedder(cfg.embedding)
     repo = _make_repository(cfg)
-    try:
-        repo.vacuum()
-    except Exception:
-        pass
+
+    repo.drop()
+    cache_path = cfg.resolve(cfg.indexer.hash_cache_path)
+    if cache_path.exists():
+        cache_path.unlink()
+
     indexer = IncrementalIndexer(cfg, embedder, repo)
-    result = indexer.reindex_all()
+    result = indexer.index(force_reindex=True)
     console.print(
         f"[green]Rebuilt[/green]: {result.indexed} files, "
         f"{result.chunks_created} chunks in {result.duration_seconds:.2f}s"

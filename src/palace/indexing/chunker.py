@@ -132,6 +132,10 @@ class MarkdownASTChunker:
             # direct body before a nested child. The context still gives YAKE
             # useful section-specific nouns in that case.
             text = "".join(lines[body_start:body_end]).strip()
+            # Drop preamble chunks: empty, whitespace-only, or YAML frontmatter
+            # dashes with no body text. Never pass these to the embedder.
+            if not text or text in {"---", "..."}:
+                continue
             embed_text = f"Context: {context_path}\n\n{text}"
             chunks.append(
                 {
