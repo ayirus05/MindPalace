@@ -125,10 +125,8 @@ class LanceDBRepository:
 
     # -- writes --
 
-    def insert_chunks(self, chunks: list[Chunk]) -> int:
-        """Append chunks to the table.  Embeddings must be populated."""
-        if not chunks:
-            return 0
+    def _validated_rows(self, chunks: list[Chunk]) -> list[dict[str, Any]]:
+        """Convert chunks to rows and validate their embedding dimensions."""
         rows = [self._chunk_to_row(c) for c in chunks]
         missing = [r["chunk_id"] for r in rows if not r["vector"]]
         if missing:
@@ -138,8 +136,16 @@ class LanceDBRepository:
             raise ValueError("Cannot insert chunks with empty embedding vectors")
         if len(set(dims)) != 1:
             raise ValueError("All chunk embeddings must have the same dimensionality")
-        self._ensure_table(vector_dim=dims[0])
+        return rows
+
+    def insert_chunks(self, chunks: list[Chunk]) -> int:
+        """Append chunks to the table.  Embeddings must be populated."""
+        if not chunks:
+            return 0
+        rows = self._validated_rows(chunks)
+        self._ensure_table(vector_dim=len(rows[0]["vector"]))
         self._table.add(rows)
+        self._table.create_fts_index("content", replace=True)
         logger.info("Inserted %d chunks", len(rows))
         return len(rows)
 
@@ -160,7 +166,14 @@ class LanceDBRepository:
     def update_chunks(self, source_file: str, chunks: list[Chunk]) -> int:
         """Replace all chunks for ``source_file`` with ``chunks``."""
         self.delete_chunks(source_file)
-        return self.insert_chunks(chunks)
+        if not chunks:
+            return 0
+        rows = self._validated_rows(chunks)
+        self._ensure_table(vector_dim=len(rows[0]["vector"]))
+        self._table.add(rows)
+        self._table.create_fts_index("content", replace=True)
+        logger.info("Inserted %d chunks", len(rows))
+        return len(rows)
 
     # -- reads --
 
@@ -198,6 +211,31 @@ class LanceDBRepository:
         results = query.limit(top_k).to_list()
         return [self._row_to_dict(r) for r in results]
 
+    def search_keyword(
+        self,
+        query: str,
+        top_k: int = 50,
+        domain: DocumentDomain | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        tags: list[str] | None = None,
+        metadata_filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """BM25 keyword search with metadata pre-filtering."""
+        if self._table is None and self._table_name not in self._db.table_names():
+            return []
+        self._ensure_table()
+        filter_sql = self._build_filter_sql(
+            domain, date_from, date_to, tags, metadata_filters
+        )
+        keyword_query = self._table.search(query, query_type="fts")
+
+        if filter_sql:
+            keyword_query = keyword_query.where(filter_sql)
+
+        results = keyword_query.limit(top_k).to_list()
+        return [self._row_to_dict(row) for row in results]
+
     def _build_filter_sql(
         self,
         domain: DocumentDomain | None,
@@ -225,10 +263,10 @@ class LanceDBRepository:
         # Generic metadata filters (key-value pairs).
         if metadata_filters:
             for key, value in metadata_filters.items():
+                if not isinstance(key, str) or not _FILTER_KEY_PATTERN.fullmatch(key):
+                    raise ValueError(f"Invalid metadata filter key: {key!r}")
                 if value is None:
                     continue
-                if not _FILTER_KEY_PATTERN.fullmatch(key):
-                    raise ValueError(f"Invalid metadata filter key: {key!r}")
                 if isinstance(value, DocumentDomain):
                     clauses.append(f"{key} = '{_escape_sql_string(value.value)}'")
                 elif isinstance(value, (date, datetime)):

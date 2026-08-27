@@ -10,7 +10,7 @@ import pytest
 from palace.indexing.hash_cache import HashCache
 from palace.indexing.indexer import IncrementalIndexer
 from palace.indexing.repository import LanceDBRepository
-from palace.models.chunk import DocumentDomain, RawHit
+from palace.models.chunk import DocumentDomain, RawHit, SearchResult
 from palace.search.engine import SemanticSearchEngine
 from palace.search.ranker import SearchRanker
 from palace.models.config import SearchConfig
@@ -242,21 +242,42 @@ class TestSemanticSearchEngine:
             if r.tags:
                 assert "health" in r.tags
 
-    def test_search_forwards_metadata_filters(self, config, embedder: FakeEmbedder) -> None:
-        class RecordingRepository:
-            arguments: dict[str, object] = {}
+    def test_search_forwards_coerced_filters_to_hybrid_searcher(
+        self, config, embedder: FakeEmbedder
+    ) -> None:
+        class RecordingHybridSearcher:
+            query = ""
+            filters: dict[str, object] = {}
 
-            def search(self, **kwargs: object) -> list[dict[str, object]]:
-                self.arguments = kwargs
+            def search(self, query: str, **filters: object) -> list[SearchResult]:
+                self.query = query
+                self.filters = filters
                 return []
 
-        repository = RecordingRepository()
-        engine = SemanticSearchEngine(config, embedder, repository)
+        engine = SemanticSearchEngine(config, embedder, object())
+        hybrid_searcher = RecordingHybridSearcher()
+        engine._hybrid_searcher = hybrid_searcher
         metadata_filters = {"source_file": "/journal.md"}
 
-        engine.search("energy", metadata_filters=metadata_filters)
+        engine.search(
+            "energy",
+            domain="journal",
+            date_from="2026-01-01",
+            date_to="2026-12-31",
+            tags=["health"],
+            metadata_filters=metadata_filters,
+            top_k=3,
+        )
 
-        assert repository.arguments["metadata_filters"] == metadata_filters
+        assert hybrid_searcher.query == "energy"
+        assert hybrid_searcher.filters == {
+            "domain": DocumentDomain.JOURNAL,
+            "date_from": date(2026, 1, 1),
+            "date_to": date(2026, 12, 31),
+            "tags": ["health"],
+            "metadata_filters": metadata_filters,
+            "top_k": 3,
+        }
 
     def test_search_returns_diagnostics(
         self, populated_engine: SemanticSearchEngine
@@ -291,7 +312,7 @@ class TestSemanticSearchEngine:
         config.search.deduplicate_by_source = False
 
         class StaticRepository:
-            def search(self, **_kwargs):
+            def search(self, *_args, **_kwargs):
                 return [
                     {
                         "chunk_id": "semantic",
@@ -311,6 +332,9 @@ class TestSemanticSearchEngine:
                     },
                 ]
 
+            def search_keyword(self, *_args, **_kwargs):
+                return []
+
         engine = SemanticSearchEngine(config, embedder, StaticRepository())
 
         results = engine.search("hybrid search").results
@@ -321,17 +345,20 @@ class TestSemanticSearchEngine:
         self, config, embedder: FakeEmbedder
     ) -> None:
         class EmptyRepository:
-            def search(self, **_kwargs):
+            def search(self, *_args, **_kwargs):
+                return []
+
+            def search_keyword(self, *_args, **_kwargs):
                 return []
 
         ranker = SearchRanker(config.search)
         calls: list[dict] = []
 
-        def record_rank(hits, **kwargs):
-            calls.append({"hits": hits, **kwargs})
+        def record_rerank(query, candidates, **kwargs):
+            calls.append({"query": query, "candidates": candidates, **kwargs})
             return []
 
-        ranker.rank = record_rank  # type: ignore[method-assign]
+        ranker.rerank = record_rerank  # type: ignore[method-assign]
         engine = SemanticSearchEngine(config, embedder, EmptyRepository(), ranker)
 
         outcome = engine.search("query", top_k=3, minimum_score=0.4)
@@ -339,9 +366,7 @@ class TestSemanticSearchEngine:
         assert outcome.results == []
         assert calls == [
             {
-                "hits": [],
-                "query_keywords": ["query"],
-                "top_k": 3,
-                "minimum_score": 0.4,
+                "query": "query",
+                "candidates": [],
             }
         ]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -40,6 +41,66 @@ def _make_chunk(
 
 
 class TestLanceDBRepository:
+    def test_insert_rebuilds_fts_index(self) -> None:
+        repository = object.__new__(LanceDBRepository)
+        repository._table = MagicMock()
+
+        inserted = repository.insert_chunks([
+            _make_chunk("c1", "/a.md", "searchable content", [0.1, 0.2]),
+        ])
+
+        assert inserted == 1
+        repository._table.add.assert_called_once()
+        repository._table.create_fts_index.assert_called_once_with(
+            "content", replace=True
+        )
+
+    def test_update_rebuilds_fts_index(self) -> None:
+        repository = object.__new__(LanceDBRepository)
+        repository._table = MagicMock()
+        repository.delete_chunks = MagicMock(return_value=1)
+
+        updated = repository.update_chunks(
+            "/a.md",
+            [_make_chunk("c2", "/a.md", "replacement content", [0.1, 0.2])],
+        )
+
+        assert updated == 1
+        repository.delete_chunks.assert_called_once_with("/a.md")
+        repository._table.add.assert_called_once()
+        repository._table.create_fts_index.assert_called_once_with(
+            "content", replace=True
+        )
+
+    def test_search_keyword_uses_fts_and_filters(self) -> None:
+        repository = object.__new__(LanceDBRepository)
+        keyword_query = MagicMock()
+        filtered_query = keyword_query.where.return_value
+        filtered_query.limit.return_value.to_list.return_value = [
+            {
+                "chunk_id": "c1",
+                "content": "hybrid retrieval",
+                "domain": "notes",
+                "date": "2026-08-27",
+            }
+        ]
+        repository._table = MagicMock()
+        repository._table.search.return_value = keyword_query
+
+        results = repository.search_keyword(
+            "hybrid",
+            top_k=3,
+            domain=DocumentDomain.NOTES,
+            metadata_filters={"source_file": "/a.md"},
+        )
+
+        repository._table.search.assert_called_once_with("hybrid", query_type="fts")
+        keyword_query.where.assert_called_once_with(
+            "domain = 'notes' AND source_file = '/a.md'"
+        )
+        filtered_query.limit.assert_called_once_with(3)
+        assert results[0]["domain"] == DocumentDomain.NOTES
+
     def test_insert_and_count(self, repository: LanceDBRepository) -> None:
         chunks = [
             _make_chunk("c1", "/a.md", "hello world", [0.1, 0.2]),
@@ -181,17 +242,18 @@ class TestLanceDBRepository:
         assert len(results) == 1
         assert results[0]["chunk_id"] == "c2"
 
-    def test_search_rejects_invalid_metadata_filter_key(
-        self, repository: LanceDBRepository
+    @pytest.mark.parametrize("value", ["/b.md", None])
+    def test_filter_sql_rejects_every_invalid_metadata_key(
+        self, value: str | None
     ) -> None:
-        repository.insert_chunks([
-            _make_chunk("c1", "/a.md", "first", [0.1, 0.2]),
-        ])
-
+        repository = object.__new__(LanceDBRepository)
         with pytest.raises(ValueError, match="Invalid metadata filter key"):
-            repository.search(
-                query_vector=[0.1, 0.2],
-                metadata_filters={"source_file = '/a.md' OR 1": "/b.md"},
+            repository._build_filter_sql(
+                domain=None,
+                date_from=None,
+                date_to=None,
+                tags=None,
+                metadata_filters={"source-file": value},
             )
 
     def test_filter_by_metadata(self, repository: LanceDBRepository) -> None:

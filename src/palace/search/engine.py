@@ -15,9 +15,9 @@ from typing import Any
 
 from palace.embedder import OllamaEmbedder
 from palace.indexing.repository import LanceDBRepository
-from palace.metadata.keywords import extract_keywords
-from palace.models.chunk import DocumentDomain, RawHit, SearchResult
+from palace.models.chunk import DocumentDomain, SearchResult
 from palace.models.config import PalaceConfig
+from palace.search.hybrid import HybridSearcher
 from palace.search.ranker import SearchRanker
 
 
@@ -37,9 +37,8 @@ class SemanticSearchEngine:
     """High-level semantic search over the local LanceDB index.
 
     Responsibilities:
-      * Embed the query via the configured :class:`OllamaEmbedder`.
-      * Pre-filter on metadata (domain / date / tags) where possible.
-      * Delegate ranking to :class:`SearchRanker`.
+      * Coerce public filter arguments into repository-ready types.
+      * Delegate retrieval and ranking to :class:`HybridSearcher`.
       * Return clean :class:`SearchResult` objects.
 
     The class holds no per-call state, so it's safe to reuse across calls.
@@ -56,6 +55,11 @@ class SemanticSearchEngine:
         self._embedder = embedder
         self._repository = repository
         self._ranker = ranker or SearchRanker(config.search)
+        self._hybrid_searcher = HybridSearcher(
+            repository=self._repository,
+            embedding_model=self._embedder,
+            ranker=self._ranker,
+        )
 
     def search(
         self,
@@ -76,33 +80,25 @@ class SemanticSearchEngine:
         d_from = _coerce_date(date_from)
         d_to = _coerce_date(date_to)
 
-        # Embed query.
-        query_vector = self._embedder.embed_one(query)
-        query_keywords = extract_keywords(query)
+        filters = {
+            key: value
+            for key, value in {
+                "domain": domain_enum,
+                "date_from": d_from,
+                "date_to": d_to,
+                "tags": tags,
+                "metadata_filters": metadata_filters,
+                "top_k": top_k,
+            }.items()
+            if value is not None
+        }
+        results = self._hybrid_searcher.search(query, **filters)
+        if minimum_score is not None:
+            results = [result for result in results if result.score >= minimum_score]
+        if top_k is not None:
+            results = results[:top_k]
 
-        # Vector search with pre-filtering.
-        prefilter_k = self._config.search.prefilter_top_k
-        raw = self._repository.search(
-            query_vector=query_vector,
-            top_k=prefilter_k,
-            domain=domain_enum,
-            date_from=d_from,
-            date_to=d_to,
-            tags=tags,
-            metadata_filters=metadata_filters,
-        )
-        candidate_count = len(raw)
-        logger.debug("Vector search returned %d candidates", candidate_count)
-
-        # Convert to RawHit for the ranker.
-        hits = [_row_to_hit(r) for r in raw]
-
-        results = self._ranker.rank(
-            hits,
-            query_keywords=query_keywords,
-            top_k=top_k,
-            minimum_score=minimum_score,
-        )
+        candidate_count = len(results)
         duration_ms = (time.monotonic() - t0) * 1000
         logger.info(
             "Search '%s' -> %d results in %.1fms (candidates=%d)",
@@ -136,41 +132,6 @@ def _coerce_date(value: date | str | None) -> date | None:
     except ValueError:
         logger.warning("Could not parse date filter: %r", value)
         return None
-
-
-def _row_to_hit(row: dict[str, Any]) -> RawHit:
-    """Convert a repository row dict to a :class:`RawHit`."""
-    d = row.get("date")
-    parsed_date: date | None = None
-    if d:
-        try:
-            parsed_date = date.fromisoformat(d)
-        except ValueError:
-            parsed_date = None
-    domain_value = row.get("domain")
-    domain = (
-        domain_value
-        if isinstance(domain_value, DocumentDomain)
-        else DocumentDomain.from_string(domain_value)
-    )
-    # Score may be ``_similarity`` when the store exposes cosine similarity,
-    # or ``_distance`` for distance-based metrics. Convert distance to a
-    # positive proxy while preserving ordering.
-    score = row.get("_similarity")
-    if score is None:
-        dist = float(row.get("_distance", 0.0))
-        score = 1.0 / (1.0 + dist)
-    return RawHit(
-        chunk_id=row.get("chunk_id", ""),
-        content=row.get("content", ""),
-        score=float(score),
-        source_file=row.get("source_file", ""),
-        date=parsed_date,
-        domain=domain,
-        tags=row.get("tags") or [],
-        keywords=row.get("keywords") or [],
-        word_count=row.get("word_count", 0),
-    )
 
 
 __all__ = ["SemanticSearchEngine", "SearchOutcome"]
