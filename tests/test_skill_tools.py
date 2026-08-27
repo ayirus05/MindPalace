@@ -10,6 +10,43 @@ import pytest
 from palace.skills import tools
 
 
+class _SearchOutcome:
+    results: list[dict[str, object]] = []
+
+
+class _RecordingSearchEngine:
+    def __init__(self) -> None:
+        self.arguments: dict[str, object] = {}
+
+    def search(self, **kwargs: object) -> _SearchOutcome:
+        self.arguments = kwargs
+        return _SearchOutcome()
+
+
+def test_search_archival_memory_forwards_structured_filters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _RecordingSearchEngine()
+    monkeypatch.setattr(tools, "_search_engine", engine)
+
+    results = tools.search_archival_memory(
+        "project notes",
+        domain="notes",
+        date_from="2026-01-01",
+        date_to="2026-12-31",
+        tags=["project"],
+    )
+
+    assert results == []
+    assert engine.arguments == {
+        "query": "project notes",
+        "domain": "notes",
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+        "tags": ["project"],
+    }
+
+
 def test_append_to_journal_creates_and_appends(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

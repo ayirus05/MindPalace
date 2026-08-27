@@ -7,12 +7,13 @@ up the concrete embedder, repository, and indexer.
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 import os
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 import typer
 from rich.console import Console
@@ -80,6 +81,23 @@ def _make_repository(config: PalaceConfig) -> LanceDBRepository:
         db_path=config.resolve(config.database.path),
         table_name=config.database.table_name,
     )
+
+
+def _parse_metadata_filters(value: str | None) -> dict[str, Any] | None:
+    """Parse a JSON object supplied to the search command."""
+    if value is None:
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise typer.BadParameter(
+            f"Invalid JSON: {exc.msg}", param_hint="--metadata-filters"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise typer.BadParameter(
+            "Expected a JSON object", param_hint="--metadata-filters"
+        )
+    return parsed
 
 
 # ---- commands -------------------------------------------------------------
@@ -313,6 +331,13 @@ def search(
     date_from: Annotated[Optional[str], typer.Option("--from")] = None,
     date_to: Annotated[Optional[str], typer.Option("--to")] = None,
     tag: Annotated[Optional[list[str]], typer.Option("--tag", "-t")] = None,
+    metadata_filters: Annotated[
+        Optional[str],
+        typer.Option(
+            "--metadata-filters",
+            help='Additional metadata filters as a JSON object, e.g. \'{"source_file":"/notes.md"}\'',
+        ),
+    ] = None,
     top_k: Annotated[int, typer.Option("--top-k", "-k")] = None,
     minimum_score: Annotated[float, typer.Option("--min-score")] = None,
     json_out: Annotated[bool, typer.Option("--json", help="Emit JSON")] = False,
@@ -329,12 +354,12 @@ def search(
         date_from=date_from,
         date_to=date_to,
         tags=tag,
+        metadata_filters=_parse_metadata_filters(metadata_filters),
         top_k=top_k,
         minimum_score=minimum_score,
     )
 
     if json_out:
-        import json
         console.print_json(json.dumps([r.model_dump(mode="json") for r in outcome.results]))
         return
 

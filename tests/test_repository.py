@@ -165,6 +165,35 @@ class TestLanceDBRepository:
         assert len(results) == 1
         assert results[0]["source_file"] == "/a.md"
 
+    def test_search_with_metadata_filters(self, repository: LanceDBRepository) -> None:
+        chunks = [
+            _make_chunk("c1", "/a.md", "first", [0.1, 0.2]),
+            _make_chunk("c2", "/b.md", "second", [0.1, 0.2]),
+        ]
+        repository.insert_chunks(chunks)
+
+        results = repository.search(
+            query_vector=[0.1, 0.2],
+            top_k=5,
+            metadata_filters={"source_file": "/b.md"},
+        )
+
+        assert len(results) == 1
+        assert results[0]["chunk_id"] == "c2"
+
+    def test_search_rejects_invalid_metadata_filter_key(
+        self, repository: LanceDBRepository
+    ) -> None:
+        repository.insert_chunks([
+            _make_chunk("c1", "/a.md", "first", [0.1, 0.2]),
+        ])
+
+        with pytest.raises(ValueError, match="Invalid metadata filter key"):
+            repository.search(
+                query_vector=[0.1, 0.2],
+                metadata_filters={"source_file = '/a.md' OR 1": "/b.md"},
+            )
+
     def test_filter_by_metadata(self, repository: LanceDBRepository) -> None:
         chunks = [
             _make_chunk("c1", "/a.md", "content one", [0.1, 0.2]),

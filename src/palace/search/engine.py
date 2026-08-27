@@ -64,6 +64,7 @@ class SemanticSearchEngine:
         date_from: date | str | None = None,
         date_to: date | str | None = None,
         tags: list[str] | None = None,
+        metadata_filters: dict[str, Any] | None = None,
         top_k: int | None = None,
         minimum_score: float | None = None,
     ) -> SearchOutcome:
@@ -88,6 +89,7 @@ class SemanticSearchEngine:
             date_from=d_from,
             date_to=d_to,
             tags=tags,
+            metadata_filters=metadata_filters,
         )
         candidate_count = len(raw)
         logger.debug("Vector search returned %d candidates", candidate_count)

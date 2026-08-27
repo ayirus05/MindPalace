@@ -242,6 +242,22 @@ class TestSemanticSearchEngine:
             if r.tags:
                 assert "health" in r.tags
 
+    def test_search_forwards_metadata_filters(self, config, embedder: FakeEmbedder) -> None:
+        class RecordingRepository:
+            arguments: dict[str, object] = {}
+
+            def search(self, **kwargs: object) -> list[dict[str, object]]:
+                self.arguments = kwargs
+                return []
+
+        repository = RecordingRepository()
+        engine = SemanticSearchEngine(config, embedder, repository)
+        metadata_filters = {"source_file": "/journal.md"}
+
+        engine.search("energy", metadata_filters=metadata_filters)
+
+        assert repository.arguments["metadata_filters"] == metadata_filters
+
     def test_search_returns_diagnostics(
         self, populated_engine: SemanticSearchEngine
     ) -> None:

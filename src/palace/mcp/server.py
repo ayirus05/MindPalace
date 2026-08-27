@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import TextContent
@@ -42,13 +43,15 @@ def search_memory(
     domain: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    metadata_filters: dict[str, Any] | None = None,
 ) -> list[TextContent]:
-    """Search semantic memory, optionally filtering by domain and date range."""
+    """Search semantic memory, optionally filtering by metadata."""
     outcome = _get_engine().search(
         query=query,
         domain=domain,
         date_from=date_from,
         date_to=date_to,
+        metadata_filters=metadata_filters,
     )
     return [
         TextContent(type="text", text=result.model_dump_json())

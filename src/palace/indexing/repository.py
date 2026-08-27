@@ -16,6 +16,7 @@ Design notes
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,8 @@ from palace.models.chunk import Chunk, ChunkMetadata, DocumentDomain
 
 
 logger = logging.getLogger("palace.repository")
+
+_FILTER_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _escape_sql_string(value: str) -> str:
@@ -169,16 +172,24 @@ class LanceDBRepository:
         date_from: date | None = None,
         date_to: date | None = None,
         tags: list[str] | None = None,
+        metadata_filters: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Vector search with metadata pre-filtering.
 
         LanceDB's filter pushdown narrows the candidate set before the vector
         comparison, keeping the search fast over large tables.
+
+        Args:
+            metadata_filters: Optional dict of arbitrary key-value filters
+                applied before vector distance calculation (e.g., source_file,
+                word_count, or created_at). Combined with the standard filters.
         """
         if self._table is None and self._table_name not in self._db.table_names():
             return []
         self._ensure_table()
-        filter_sql = self._build_filter_sql(domain, date_from, date_to, tags)
+        filter_sql = self._build_filter_sql(
+            domain, date_from, date_to, tags, metadata_filters
+        )
         query = self._table.search(query_vector, vector_column_name="vector")
 
         if filter_sql:
@@ -193,8 +204,14 @@ class LanceDBRepository:
         date_from: date | None,
         date_to: date | None,
         tags: list[str] | None,
+        metadata_filters: dict[str, Any] | None = None,
     ) -> str:
-        """Build a LanceDB SQL-style WHERE clause for pre-filtering."""
+        """Build a LanceDB SQL-style WHERE clause for pre-filtering.
+
+        Accepts the standard structured filters (domain, date range, tags)
+        plus an optional generic metadata_filters dict for arbitrary
+        key-value filtering over stored chunk metadata.
+        """
         clauses: list[str] = []
         if domain is not None:
             clauses.append(f"domain = '{_escape_sql_string(domain.value)}'")
@@ -203,9 +220,32 @@ class LanceDBRepository:
         if date_to is not None:
             clauses.append(f"date <= '{date_to.isoformat()}'")
         if tags:
-            # array_contains_all isn't standard; use one array_contains per tag.
             tag_clauses = [f"array_contains(tags, '{_escape_sql_string(t)}')" for t in tags]
             clauses.append("(" + " AND ".join(tag_clauses) + ")")
+        # Generic metadata filters (key-value pairs).
+        if metadata_filters:
+            for key, value in metadata_filters.items():
+                if value is None:
+                    continue
+                if not _FILTER_KEY_PATTERN.fullmatch(key):
+                    raise ValueError(f"Invalid metadata filter key: {key!r}")
+                if isinstance(value, DocumentDomain):
+                    clauses.append(f"{key} = '{_escape_sql_string(value.value)}'")
+                elif isinstance(value, (date, datetime)):
+                    clauses.append(f"{key} >= '{value.isoformat()}'")
+                elif isinstance(value, str):
+                    clauses.append(f"{key} = '{_escape_sql_string(value)}'")
+                elif isinstance(value, list):
+                    if value:
+                        sub = [
+                            f"array_contains({key}, '{_escape_sql_string(str(v))}')"
+                            for v in value
+                        ]
+                        clauses.append("(" + " AND ".join(sub) + ")")
+                elif isinstance(value, (int, float)):
+                    clauses.append(f"{key} = {value}")
+                else:
+                    clauses.append(f"{key} = '{_escape_sql_string(str(value))}'")
         return " AND ".join(clauses)
 
     def filter_by_metadata(self, **filters: Any) -> list[dict[str, Any]]:

@@ -58,10 +58,19 @@ def update_core_fact(
 def search_archival_memory(
     query: str,
     domain: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tags: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Search archival memory and return matching chunks."""
+    """Search archival memory with optional domain, date, and tag filters."""
     engine = _require_search_engine()
-    results = engine.search(query=query, domain=domain).results
+    results = engine.search(
+        query=query,
+        domain=domain,
+        date_from=date_from,
+        date_to=date_to,
+        tags=tags,
+    ).results
     return [_serialize_search_result(r) for r in results]
 
 # ---- Journal Tools ----
