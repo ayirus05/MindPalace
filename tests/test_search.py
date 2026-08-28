@@ -286,6 +286,22 @@ class TestSemanticSearchEngine:
         assert outcome.duration_ms > 0
         assert isinstance(outcome.candidate_count, int)
         assert isinstance(outcome.results, list)
+        assert outcome.degraded_mode is False
+
+    def test_search_reports_degraded_mode(
+        self, config, embedder: FakeEmbedder
+    ) -> None:
+        class DegradedHybridSearcher:
+            def search(self, query: str, **filters: object):
+                return [], True
+
+        engine = SemanticSearchEngine(config, embedder, object())
+        engine._hybrid_searcher = DegradedHybridSearcher()
+
+        outcome = engine.search("energy")
+
+        assert outcome.results == []
+        assert outcome.degraded_mode is True
 
     def test_search_empty_index(self, engine: SemanticSearchEngine) -> None:
         results = engine.search("anything").results

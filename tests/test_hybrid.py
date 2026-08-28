@@ -98,9 +98,10 @@ def test_search_combines_vector_and_fts_candidates_before_reranking() -> None:
     searcher = HybridSearcher(repository, embedder, ranker)
     filters = {"top_k": 10, "tags": ["search"]}
 
-    results = searcher.search("hybrid retrieval", **filters)
+    results, degraded_mode = searcher.search("hybrid retrieval", **filters)
 
     assert results == ranker.results
+    assert degraded_mode is False
     assert embedder.queries == ["hybrid retrieval"]
     assert repository.vector_calls == [([0.1, 0.2], filters)]
     assert repository.keyword_calls == [("hybrid retrieval", filters)]
@@ -114,6 +115,43 @@ def test_search_combines_vector_and_fts_candidates_before_reranking() -> None:
     assert [candidate.raw_score for candidate in ranker.candidates] == [0.8, 0.7, 2.5]
     assert ranker.candidates[0].hit.date.isoformat() == "2026-08-20"
     assert ranker.candidates[1].hit.domain == DocumentDomain.JOURNAL
+
+
+def test_search_uses_fts_when_embedding_fails(caplog) -> None:
+    class FailingEmbedder:
+        def embed_one(self, text: str) -> list[float]:
+            raise RuntimeError("embedding unavailable")
+
+    repository = RecordingRepository()
+    ranker = RecordingRanker()
+    searcher = HybridSearcher(repository, FailingEmbedder(), ranker)
+
+    results, degraded_mode = searcher.search("hybrid retrieval", top_k=5)
+
+    assert results == ranker.results
+    assert degraded_mode is True
+    assert repository.vector_calls == []
+    assert repository.keyword_calls == [("hybrid retrieval", {"top_k": 5})]
+    assert [candidate.source for candidate in ranker.candidates] == ["fts"]
+    assert "Vector retrieval failed" in caplog.text
+
+
+def test_search_uses_fts_when_vector_repository_search_fails() -> None:
+    class FailingVectorRepository(RecordingRepository):
+        def search(
+            self, vector: list[float], **filters: Any
+        ) -> list[dict[str, Any]]:
+            raise RuntimeError("vector index unavailable")
+
+    repository = FailingVectorRepository()
+    ranker = RecordingRanker()
+    searcher = HybridSearcher(repository, RecordingEmbedder(), ranker)
+
+    _, degraded_mode = searcher.search("hybrid retrieval")
+
+    assert degraded_mode is True
+    assert repository.keyword_calls == [("hybrid retrieval", {})]
+    assert [candidate.source for candidate in ranker.candidates] == ["fts"]
 
 
 class RecordingCrossEncoder(CrossEncoderModel):

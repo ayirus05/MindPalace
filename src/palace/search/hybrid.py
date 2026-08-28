@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Any, Protocol
 
 from palace.indexing.repository import LanceDBRepository
 from palace.models.chunk import DocumentDomain, RawHit, SearchResult
 from palace.search.ranker import HybridRetrievalResult, SearchRanker
+
+
+logger = logging.getLogger("palace.search.hybrid")
 
 
 class EmbeddingModel(Protocol):
@@ -31,20 +35,30 @@ class HybridSearcher:
         self._embedding_model = embedding_model
         self._ranker = ranker
 
-    def search(self, query: str, **filters: Any) -> list[SearchResult]:
-        """Run vector and FTS retrieval and return the reranked results."""
-        query_vector = self._embedding_model.embed_one(query)
-
-        vector_rows = self._repository.search(query_vector, **filters)
-        vector_results = _to_hybrid_results(vector_rows, source="vector")
+    def search(
+        self, query: str, **filters: Any
+    ) -> tuple[list[SearchResult], bool]:
+        """Run hybrid retrieval, falling back to FTS if vector search fails."""
+        degraded_mode = False
+        try:
+            query_vector = self._embedding_model.embed_one(query)
+            vector_rows = self._repository.search(query_vector, **filters)
+            vector_results = _to_hybrid_results(vector_rows, source="vector")
+        except Exception:
+            logger.warning(
+                "Vector retrieval failed; continuing with keyword search",
+                exc_info=True,
+            )
+            vector_results = []
+            degraded_mode = True
 
         keyword_rows = self._repository.search_keyword(query, **filters)
         keyword_results = _to_hybrid_results(keyword_rows, source="fts")
 
-        return self._ranker.rerank(
-            query,
-            [*vector_results, *keyword_results],
+        results = self._ranker.rerank(
+            query, [*vector_results, *keyword_results]
         )
+        return results, degraded_mode
 
 
 def _to_hybrid_results(

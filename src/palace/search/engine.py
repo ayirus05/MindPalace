@@ -17,6 +17,7 @@ from palace.embedder import OllamaEmbedder
 from palace.indexing.repository import LanceDBRepository
 from palace.models.chunk import DocumentDomain, SearchResult
 from palace.models.config import PalaceConfig
+from palace.models.search import SearchFilter
 from palace.search.hybrid import HybridSearcher
 from palace.search.ranker import SearchRanker
 
@@ -31,6 +32,7 @@ class SearchOutcome:
     results: list[SearchResult]
     duration_ms: float
     candidate_count: int
+    degraded_mode: bool = False
 
 
 class SemanticSearchEngine:
@@ -75,28 +77,28 @@ class SemanticSearchEngine:
         """Search the index and return results with timing diagnostics."""
         t0 = time.monotonic()
 
-        # Coerce types.
-        domain_enum = _coerce_domain(domain)
-        d_from = _coerce_date(date_from)
-        d_to = _coerce_date(date_to)
-
-        filters = {
-            key: value
-            for key, value in {
-                "domain": domain_enum,
-                "date_from": d_from,
-                "date_to": d_to,
+        search_filter = SearchFilter.model_validate(
+            {
+                "domain": domain,
+                "date_from": date_from,
+                "date_to": date_to,
                 "tags": tags,
                 "metadata_filters": metadata_filters,
                 "top_k": top_k,
-            }.items()
-            if value is not None
-        }
-        results = self._hybrid_searcher.search(query, **filters)
+            }
+        )
+        filters = search_filter.model_dump(exclude_none=True)
+        hybrid_outcome = self._hybrid_searcher.search(query, **filters)
+        if isinstance(hybrid_outcome, tuple):
+            results, degraded_mode = hybrid_outcome
+        else:
+            # Preserve compatibility with injected search doubles.
+            results = hybrid_outcome
+            degraded_mode = False
         if minimum_score is not None:
             results = [result for result in results if result.score >= minimum_score]
-        if top_k is not None:
-            results = results[:top_k]
+        if search_filter.top_k is not None:
+            results = results[:search_filter.top_k]
 
         candidate_count = len(results)
         duration_ms = (time.monotonic() - t0) * 1000
@@ -108,30 +110,8 @@ class SemanticSearchEngine:
             results=results,
             duration_ms=duration_ms,
             candidate_count=candidate_count,
+            degraded_mode=degraded_mode,
         )
-
-
-# ---- helpers --------------------------------------------------------------
-
-
-def _coerce_domain(value: str | DocumentDomain | None) -> DocumentDomain | None:
-    if value is None:
-        return None
-    if isinstance(value, DocumentDomain):
-        return value
-    return DocumentDomain.from_string(value)
-
-
-def _coerce_date(value: date | str | None) -> date | None:
-    if value is None:
-        return None
-    if isinstance(value, date):
-        return value
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        logger.warning("Could not parse date filter: %r", value)
-        return None
 
 
 __all__ = ["SemanticSearchEngine", "SearchOutcome"]
